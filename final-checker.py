@@ -6,29 +6,66 @@ import re
 # 頁面基本設定
 st.set_page_config(page_title="醫學系實習選配管理系統", layout="wide")
 
-# --- 高級感 CSS (宋體 + 黑白灰 + 完美條列式) ---
+# --- 莫蘭迪色系 + 強制宋體 CSS ---
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;700&display=swap');
     
-    html, body, [class*="css"] {
-        font-family: 'Noto Serif TC', 'Songti TC', serif !important;
-        color: #000000;
+    /* 強制全域字體與背景 */
+    html, body, [class*="css"], [data-testid="stAppViewContainer"], .stApp {
+        font-family: 'Noto Serif TC', 'Songti TC', 'PMingLiU', 'MingLiU', 'SimSun', serif !important;
+        background-color: #F2F0EB !important; /* 燕麥灰底色 */
+        color: #4A4F4D !important; /* 炭灰色字體 (降低對比度) */
     }
-    h1, h2, h3 { 
-        color: #000000 !important; 
-        border-bottom: 1px solid #000000; 
-        padding-bottom: 5px; 
-    }
-    .stApp { background-color: #FFFFFF; }
-    section[data-testid="stSidebar"] { background-color: #FFFFFF; border-right: 1px solid #DDDDDD; }
-    .stButton>button { color: #FFFFFF !important; background-color: #000000 !important; border-radius: 0px; width: 100%; }
     
-    /* 表格設定：完美支援 \n 換行，並置左對齊 */
+    h1, h2, h3 { 
+        color: #3B403E !important; 
+        border-bottom: 1px solid #D1D1C9; 
+        padding-bottom: 5px; 
+        font-weight: 700;
+    }
+    
+    /* 側邊欄莫蘭迪色 */
+    section[data-testid="stSidebar"] { 
+        background-color: #E8E6E1 !important; 
+        border-right: 1px solid #D1D1C9 !important; 
+    }
+    
+    /* 莫蘭迪按鈕 (鼠尾草綠) */
+    .stButton>button { 
+        background-color: #7D8B84 !important; 
+        color: #FFFFFF !important; 
+        border: none !important;
+        border-radius: 4px !important; 
+        width: 100%; 
+        transition: 0.3s;
+    }
+    .stButton>button:hover {
+        background-color: #65736C !important;
+        color: #FFFFFF !important;
+    }
+
+    /* 重新整理按鈕專屬 (淡雅灰) */
+    .btn-reset>button {
+        background-color: #B5B5AD !important;
+    }
+    .btn-reset>button:hover {
+        background-color: #9C9C94 !important;
+    }
+    
+    /* 表格設定：完美支援條列式與邊框柔化 */
     .stTable { font-size: 14px; }
+    th {
+        background-color: #E4E5E0 !important;
+        color: #4A4F4D !important;
+        border-bottom: 2px solid #C5C9C7 !important;
+    }
+    td {
+        border-bottom: 1px solid #E4E5E0 !important;
+    }
     th, td {
         white-space: pre-wrap !important; 
-        vertical-align: middle !important; 
+        vertical-align: top !important; 
         line-height: 1.8 !important;
         text-align: left !important;
     }
@@ -57,22 +94,18 @@ def smart_read_sheet(file):
     except: return None
 
 def parse_date_simple(s, year=2026):
-    """裝甲級日期解析：支援 2026/5/4、5/4、05.04 各種變體"""
     try:
         s = str(s).replace('\n', '').strip()
         parts = re.findall(r'\d+', s)
         if len(parts) >= 2:
-            # 如果第一個數字是4碼(例如2026)，就抓年月日時
             if len(parts[0]) == 4 and len(parts) >= 3:
                 return datetime(int(parts[0]), int(parts[1]), int(parts[2]))
             else:
-                # 否則只抓最後兩個數字作為月、日
                 return datetime(year, int(parts[-2]), int(parts[-1]))
     except: pass
     return None
 
 def parse_period_dates(p_str):
-    """解析日期並計算精準的工作天數 (排除六日)"""
     try:
         dates = re.findall(r'\d{4}\.\d{2}\.\d{2}', str(p_str).replace('\n',''))
         if len(dates) >= 2:
@@ -92,7 +125,7 @@ st.sidebar.divider()
 if mode == "醫院代表":
     st.title("醫院內部容額與規章審核")
     
-    st.markdown("### 📋 規則設定")
+    st.markdown("### 規則設定")
     c_cfg1, c_cfg2, c_cfg3 = st.columns([1, 1, 1])
     with c_cfg1: course_dur_weeks = st.number_input("一個 Course 多久 (週)", min_value=1, value=2)
     with c_cfg2: min_weeks_req = st.number_input("最短實習週數要求 (週)", min_value=1, value=4)
@@ -103,19 +136,26 @@ if mode == "醫院代表":
     total_min_workdays = min_weeks_req * 5
 
     c1, c2 = st.columns(2)
-    with c1: q_file = st.file_uploader("1. 上傳醫院容額表", type=['xlsx'], key="h_q")
-    with c2: a_file = st.file_uploader("2. 上傳學生志願表", type=['xlsx'], key="h_a")
+    with c1: q_file = st.file_uploader("上傳醫院容額表", type=['xlsx'], key="h_q")
+    with c2: a_file = st.file_uploader("上傳學生志願表", type=['xlsx'], key="h_a")
 
-    if q_file and a_file:
+    # 加入操作按鈕
+    bc1, bc2 = st.columns(2)
+    with bc1: 
+        run_check = st.button("確認開始比對")
+    with bc2: 
+        st.markdown('<div class="btn-reset">', unsafe_allow_html=True)
+        if st.button("重新整理"): st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    if run_check and q_file and a_file:
         try:
-            # 1. 嚴格鎖定容額表 Header=4
             xls_q = pd.ExcelFile(q_file)
             try: sn_q = [s for s in xls_q.sheet_names if "容額" in s or "時段" in s][0]
             except: sn_q = xls_q.sheet_names[0]
             df_q = pd.read_excel(q_file, sheet_name=sn_q, header=4)
             df_q.columns = [str(c).strip() for c in df_q.columns]
 
-            # 2. 讀取志願表
             xls_a = pd.ExcelFile(a_file)
             try: sn_a = [s for s in xls_a.sheet_names if "志願" in s][0]
             except: sn_a = xls_a.sheet_names[0]
@@ -139,8 +179,8 @@ if mode == "醫院代表":
                         s, e, d = parse_period_dates(row['實習期間'])
                         if s: apps.append({'姓名': row['姓名'], '科別': str(row[dept_col]).strip(), '開始': s, '結束': e, '天數': d})
                 
-                # --- 碰撞偵測 ---
-                date_cols = [c for c in df_q.columns if '-' in c and any(i.isdigit() for i in c)]
+                # 改良版：自動抓取任何包含「數字/數字」格式的欄位
+                date_cols = [c for c in df_q.columns if re.search(r'\d+[/.]\d+', str(c))]
                 collisions = []
                 for _, q_row in df_q.iterrows():
                     dept = str(q_row.get('科別', '')).strip()
@@ -151,9 +191,15 @@ if mode == "醫院代表":
                         try: cap_val = int(float(re.sub(r'[^0-9.]', '', str(cap))))
                         except: continue
                         
-                        pts = col.split('-')
-                        s_slot = parse_date_simple(pts[0].strip())
-                        e_slot = parse_date_simple(pts[1].strip()) if len(pts) > 1 else s_slot
+                        # 擷取字串中所有的日期格式
+                        dates_in_col = re.findall(r'\d+[/.]\d+', str(col))
+                        if len(dates_in_col) == 1:
+                            s_slot = parse_date_simple(dates_in_col[0])
+                            e_slot = s_slot
+                        elif len(dates_in_col) >= 2:
+                            s_slot = parse_date_simple(dates_in_col[0])
+                            e_slot = parse_date_simple(dates_in_col[1])
+                        else: continue
                         
                         if s_slot and e_slot:
                             st_in_slot = []
@@ -162,6 +208,7 @@ if mode == "醫院代表":
                                     if a['開始'] <= e_slot and a['結束'] >= s_slot:
                                         st_in_slot.append(a['姓名'])
                             
+                            # 嚴格判定：大於容額才報錯
                             if len(st_in_slot) > cap_val:
                                 collisions.append({
                                     "科別": dept, 
@@ -170,7 +217,6 @@ if mode == "醫院代表":
                                     "超額學生": "、".join(list(set(st_in_slot)))
                                 })
 
-                # --- 規章嚴格審核 ---
                 invalid = []
                 if apps:
                     df_temp = pd.DataFrame(apps)
@@ -180,10 +226,10 @@ if mode == "醫院代表":
                         
                         for _, row in group.iterrows():
                             if row['天數'] < course_workdays:
-                                invalid.append({"姓名": name, "原因": f"【Course 天數不足】 {row['科別']} 僅 {row['天數']} 個工作天 (規定需 {course_workdays} 天)"})
+                                invalid.append({"姓名": name, "原因": f"[Course 天數不足] {row['科別']} 僅 {row['天數']} 個工作天 (規定需 {course_workdays} 天)"})
                         
                         if total_workdays < total_min_workdays:
-                            invalid.append({"姓名": name, "原因": f"【總時長不足】 僅 {total_workdays} 個工作天 (規定需 {total_min_workdays} 天)"})
+                            invalid.append({"姓名": name, "原因": f"[總時長不足] 僅 {total_workdays} 個工作天 (規定需 {total_min_workdays} 天)"})
                         
                         if require_cont and len(group) > 1:
                             courses = group.to_dict('records')
@@ -191,16 +237,15 @@ if mode == "醫院代表":
                                 prev_end = courses[i]['結束']
                                 next_start = courses[i+1]['開始']
                                 if (next_start - prev_end).days > 3:
-                                    invalid.append({"姓名": name, "原因": f"【未連續實習】 {courses[i]['科別']} 與 {courses[i+1]['科別']} 之間出現中斷"})
+                                    invalid.append({"姓名": name, "原因": f"[未連續實習] {courses[i]['科別']} 與 {courses[i+1]['科別']} 之間出現中斷"})
                                     break 
 
-                # --- 顯示結果 ---
                 st.header("異常監控結果")
                 if collisions:
-                    st.subheader("⚠️ 名額撞期名單 (超額佔位)")
+                    st.subheader("名額撞期名單 (超額佔位)")
                     st.table(pd.DataFrame(collisions))
                 if invalid:
-                    st.subheader("📝 規章不符名單")
+                    st.subheader("規章不符名單")
                     st.table(pd.DataFrame(invalid).drop_duplicates())
                 if not collisions and not invalid:
                     st.success("名額分配與規章核對完全符合規定。")
@@ -212,7 +257,16 @@ elif mode == "系秘":
     st.markdown("請上傳各院檔案，系統將自動比對。")
     
     multi_files = st.file_uploader("上傳各院志願清單 (可多選)", type=['xlsx'], accept_multiple_files=True)
-    if multi_files:
+    
+    bc1, bc2 = st.columns(2)
+    with bc1: 
+        run_check_sec = st.button("確認開始比對")
+    with bc2: 
+        st.markdown('<div class="btn-reset">', unsafe_allow_html=True)
+        if st.button("重新整理 "): st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
+        
+    if run_check_sec and multi_files:
         all_data = []
         for f in multi_files:
             df = smart_read_sheet(f)
@@ -244,17 +298,15 @@ elif mode == "系秘":
                         for idx in sorted(list(conflict_set)):
                             hosp = s_apps[idx]['來源醫院']
                             period = str(s_apps[idx]['實習期間']).replace('\n', '')
-                            # 【完美條列式】使用 • 符號
-                            details.append(f"• {hosp} ({period})")
+                            details.append(f"- {hosp} ({period})")
                         
                         conflicts.append({
                             "姓名": name,
-                            # 用換行符號取代所有直線，搭配 CSS 就能完美向下排列
                             "衝突詳情": "\n".join(details)
                         })
                         
             if conflicts:
-                st.subheader("⚠️ 偵測到跨院衝突名單")
+                st.subheader("偵測到跨院衝突名單")
                 df_conflicts = pd.DataFrame(conflicts)
                 st.table(df_conflicts.set_index('姓名'))
             else: 
