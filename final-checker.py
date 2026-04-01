@@ -28,12 +28,12 @@ st.markdown("""
     h1, h2, h3 { 
         color: #4A4C4B !important; 
         border-bottom: 1px solid #D6D4CE; 
-        padding-bottom: 5px;
+        padding-bottom: 5px; 
         font-weight: 700;
     }
     
     section[data-testid="stSidebar"] { 
-        background-color: #EAE8E3 !important;
+        background-color: #EAE8E3 !important; 
         border-right: 1px solid #D6D4CE !important; 
     }
     
@@ -46,7 +46,7 @@ st.markdown("""
     
     /* 一般按鈕 (鼠尾草綠) */
     .stButton > button, [data-testid="stFormSubmitButton"] > button { 
-        background-color: #8A9A92 !important;
+        background-color: #8A9A92 !important; 
         color: #FFFFFF !important; 
         border: none !important;
         border-radius: 4px !important; 
@@ -75,7 +75,7 @@ st.markdown("""
     td { border-bottom: 1px solid #EAE8E3 !important; }
     th, td {
         white-space: pre-wrap !important; 
-        vertical-align: top !important;
+        vertical-align: top !important; 
         line-height: 1.8 !important;
         text-align: left !important;
     }
@@ -87,44 +87,21 @@ def smart_read_sheet(file):
     try:
         xls = pd.ExcelFile(file)
         target_sheet = xls.sheet_names[0]
-        # 1. 擴充工作表關鍵字，增加容錯率
         for sn in xls.sheet_names:
-            if any(k in sn for k in ["志願", "名單", "工作表", "容額", "申請"]):
+            if any(k in sn for k in ["志願", "名單", "工作表4", "實習容額"]):
                 target_sheet = sn
                 break
-        
-        # 2. 先以 header=None 讀取，避免 Pandas 預設吃掉真正的第一列資料
-        df_temp = pd.read_excel(file, sheet_name=target_sheet, header=None)
+        df_temp = pd.read_excel(file, sheet_name=target_sheet)
         header_idx = 0
-        
-        # 3. 掃描前 15 列尋找標題列
         for i in range(min(len(df_temp), 15)):
-            # 移除所有空白以利比對
-            row = [str(x).replace(" ", "").strip() for x in df_temp.iloc[i].values]
-            if any(k in row for k in ["姓名", "學生姓名", "Name", "科別", "申請科別", "實習期間", "時間", "日期"]):
-                header_idx = i
+            row = [str(x).strip() for x in df_temp.iloc[i].values]
+            if any(k in row for k in ["姓名", "科別", "申請科別"]):
+                header_idx = i + 1
                 break
-                
-        # 4. 以正確的標題列重新讀取檔案
         df = pd.read_excel(file, sheet_name=target_sheet, header=header_idx)
-        
-        # 5. 智慧清理與統一欄位名稱 (自動把變形名稱轉為系統預設名稱)
-        cleaned_columns = []
-        for c in df.columns:
-            c_str = str(c).strip().replace('\n', '').replace(' ', '')
-            if "姓名" in c_str or c_str.lower() == "name":
-                cleaned_columns.append("姓名")
-            elif "期間" in c_str or "日期" in c_str or "時間" in c_str:
-                cleaned_columns.append("實習期間")
-            elif "科別" in c_str or "科" in c_str:
-                cleaned_columns.append("申請科別") 
-            else:
-                cleaned_columns.append(c_str)
-        df.columns = cleaned_columns
-        
+        df.columns = [str(c).strip() for c in df.columns]
         return df
-    except Exception as e:
-        return None
+    except: return None
 
 def extract_dates_universal(text, year=2026):
     """終極日期解析引擎：強殺換行符號與缺零日期"""
@@ -140,7 +117,7 @@ def extract_dates_universal(text, year=2026):
                 return datetime(int(nums[0]), int(nums[1]), int(nums[2]))
             return datetime(year, int(nums[-2]), int(nums[-1]))
         return None
-       
+        
     dates = [extract_single_date(p) for p in parts if extract_single_date(p) is not None]
     if len(dates) == 1: return dates[0], dates[0]
     elif len(dates) >= 2: return dates[0], dates[-1]
@@ -205,24 +182,31 @@ if mode == "醫院代表":
             df_q = pd.read_excel(q_file, sheet_name=sn_q, header=4)
             df_q.columns = [str(c).strip() for c in df_q.columns]
 
-            # 直接呼叫升級版的讀取工具，統一處理邏輯
-            df_a = smart_read_sheet(a_file)
+            xls_a = pd.ExcelFile(a_file)
+            try: sn_a = [s for s in xls_a.sheet_names if "志願" in s][0]
+            except: sn_a = xls_a.sheet_names[0]
+            df_temp = pd.read_excel(a_file, sheet_name=sn_a)
+            header_idx = 0
+            for i in range(min(len(df_temp), 15)):
+                row = [str(x).strip() for x in df_temp.iloc[i].values]
+                if any(k in row for k in ["姓名", "科別", "申請科別"]):
+                    header_idx = i + 1
+                    break
+            df_a = pd.read_excel(a_file, sheet_name=sn_a, header=header_idx)
+            df_a.columns = [str(c).strip() for c in df_a.columns]
 
             if df_q is not None and df_a is not None:
                 if '姓名' in df_a.columns: df_a['姓名'] = df_a['姓名'].ffill()
                 
                 apps = []
                 dept_col = "申請科別" if "申請科別" in df_a.columns else "科別"
-                period_col = "實習期間" if "實習期間" in df_a.columns else None
-                
                 for _, row in df_a.iterrows():
-                    if pd.notna(row.get(dept_col)) and period_col and pd.notna(row.get(period_col)):
-                        s, e, d = parse_period_dates(row[period_col])
+                    if pd.notna(row.get(dept_col)) and pd.notna(row.get('實習期間')):
+                        s, e, d = parse_period_dates(row['實習期間'])
                         if s: apps.append({'姓名': row['姓名'], '科別': str(row[dept_col]).strip(), '開始': s, '結束': e, '天數': d})
                 
                 date_cols = []
                 slot_mapping = {}
-        
                 for c in df_q.columns:
                     s_slot, e_slot = extract_dates_universal(c)
                     if s_slot and e_slot:
@@ -233,7 +217,7 @@ if mode == "醫院代表":
                 for _, q_row in df_q.iterrows():
                     dept = str(q_row.get('科別', '')).strip()
                     if dept == 'nan' or not dept: continue
-    
+                    
                     for col in date_cols:
                         cap = q_row.get(col)
                         try: cap_val = int(float(re.sub(r'[^0-9.]', '', str(cap))))
@@ -241,7 +225,6 @@ if mode == "醫院代表":
                         
                         s_slot, e_slot = slot_mapping[col]
                         st_in_slot = []
-    
                         for a in apps:
                             if a['科別'] == dept:
                                 if a['開始'] <= e_slot and a['結束'] >= s_slot:
@@ -256,7 +239,6 @@ if mode == "醫院代表":
                             })
 
                 invalid = []
-          
                 if apps:
                     df_temp = pd.DataFrame(apps)
                     for name, group in df_temp.groupby('姓名'):
@@ -277,19 +259,18 @@ if mode == "醫院代表":
                                 next_start = courses[i+1]['開始']
                                 if (next_start - prev_end).days > 3:
                                     invalid.append({"姓名": name, "原因": f"未連續實習：{courses[i]['科別']} 與 {courses[i+1]['科別']} 中斷"})
-                    
+                                    break 
+
                 st.header("異常監控結果")
                 if collisions:
                     st.subheader("名額撞期名單")
                     st.table(pd.DataFrame(collisions))
-          
                 if invalid:
                     st.subheader("規章不符名單")
                     st.table(pd.DataFrame(invalid).drop_duplicates())
                 if not collisions and not invalid:
                     st.success("名額分配與規章核對完全符合規定。")
-        except Exception as e: 
-            st.error(f"解析失敗：{e}")
+        except Exception as e: st.error(f"解析失敗：{e}")
 
 # --- 模式：系秘 ---
 elif mode == "系秘":
@@ -303,8 +284,7 @@ elif mode == "系秘":
         all_data = []
         for f in multi_files:
             df = smart_read_sheet(f)
-            # 確保升級後的欄位名稱可以被正確識別
-            if df is not None and '姓名' in df.columns and '實習期間' in df.columns:
+            if df is not None and '姓名' in df.columns:
                 df['姓名'] = df['姓名'].ffill()
                 clean_hosp_name = f.name.replace('.xlsx', '').replace('.csv', '')
                 df['來源醫院'] = clean_hosp_name
