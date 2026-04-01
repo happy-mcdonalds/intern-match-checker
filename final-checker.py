@@ -14,12 +14,15 @@ if "require_cont" not in st.session_state:
 # 頁面基本設定
 st.set_page_config(page_title="醫學系實習選配管理系統", layout="wide")
 
-# --- 升級版：溫暖莫蘭迪色系 + 強制系統原生黑體 CSS ---
+# --- 專屬襯線體 + 溫暖莫蘭迪色系 CSS ---
 st.markdown("""
     <style>
-    /* 強制全局字體：優先使用系統內建高畫質黑體，最穩定且不需下載 */
+    /* 1. 載入 Google 思源宋體 (Noto Serif TC)，引入一般(400)與粗體(600, 700) */
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;600;700&display=swap');
+    
+    /* 2. 【關鍵】使用星號 (*) 強制覆蓋 Streamlit 所有底層元件的字體 */
     * {
-        font-family: "PingFang TC", "蘋果蘋方", "Microsoft JhengHei", "微軟正黑體", "Helvetica Neue", sans-serif !important;
+        font-family: 'Noto Serif TC', 'Songti TC', 'Apple LiSung', 'PMingLiU', 'Times New Roman', serif !important;
     }
     
     /* 溫暖柔和的莫蘭迪背景 */
@@ -33,7 +36,7 @@ st.markdown("""
         color: #3B4441 !important; /* 深灰綠色 */
         border-bottom: 2px solid #D6D4CE; 
         padding-bottom: 8px;
-        font-weight: bold;
+        font-weight: 700 !important; /* 讓宋體的標題夠粗才好看 */
     }
     
     /* 側邊欄 */
@@ -51,7 +54,7 @@ st.markdown("""
         box-shadow: 0 2px 6px rgba(0,0,0,0.03);
     }
     
-    /* 一般按鈕 (恢復經典鼠尾草綠) */
+    /* 一般按鈕 (經典鼠尾草綠) */
     .stButton > button, [data-testid="stFormSubmitButton"] > button { 
         background-color: #8A9A92 !important;
         color: #FFFFFF !important; 
@@ -59,7 +62,7 @@ st.markdown("""
         border-radius: 6px !important; 
         width: 100%; 
         font-size: 16px !important;
-        font-weight: bold !important;
+        font-weight: 600 !important; /* 宋體在按鈕上需要稍微加粗才清楚 */
         transition: 0.3s;
     }
     .stButton > button:hover, [data-testid="stFormSubmitButton"] > button:hover {
@@ -82,7 +85,7 @@ st.markdown("""
         background-color: #E6E4DF !important; /* 表頭暖灰色 */
         color: #4A4C4B !important;
         border-bottom: 2px solid #C0BFB8 !important;
-        font-weight: bold !important;
+        font-weight: 700 !important;
     }
     td { border-bottom: 1px solid #F6F5F2 !important; }
     th, td {
