@@ -14,70 +14,85 @@ if "require_cont" not in st.session_state:
 # 頁面基本設定
 st.set_page_config(page_title="醫學系實習選配管理系統", layout="wide")
 
-# --- 莫蘭迪色系 + 強制純宋體 CSS ---
+# --- 高級感行政極簡風 + 現代黑體 CSS ---
 st.markdown("""
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;700&display=swap');
+    /* 引入思源黑體 (Noto Sans TC)，提供 400(一般), 500(中等), 700(粗體) */
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap');
     
+    /* 全局字體與背景設定 */
     html, body, [class*="css"], [data-testid="stAppViewContainer"], .stApp {
-        font-family: 'Noto Serif TC', 'Songti TC', 'PMingLiU', 'MingLiU', 'SimSun', serif !important;
-        background-color: #F5F4F1 !important; 
-        color: #5C5E5D !important; 
+        font-family: 'PingFang TC', 'Noto Sans TC', 'Microsoft JhengHei', 'Helvetica Neue', sans-serif !important;
+        background-color: #F8FAFC !important; /* 極淺的灰藍底色，高階 SaaS 常用 */
+        color: #1E293B !important; /* 深石板灰，比純黑更有質感 */
+        -webkit-font-smoothing: antialiased; /* 讓字體在 Mac/iOS 上更平滑 */
     }
     
+    /* 標題設計 */
     h1, h2, h3 { 
-        color: #4A4C4B !important; 
-        border-bottom: 1px solid #D6D4CE; 
-        padding-bottom: 5px;
+        color: #0F172A !important; /* 更深的午夜藍 */
+        border-bottom: 2px solid #E2E8F0; 
+        padding-bottom: 8px;
         font-weight: 700;
+        letter-spacing: 0.5px;
     }
     
+    /* 側邊欄設計 */
     section[data-testid="stSidebar"] { 
-        background-color: #EAE8E3 !important;
-        border-right: 1px solid #D6D4CE !important; 
+        background-color: #FFFFFF !important; /* 側邊欄純白，凸顯層次 */
+        border-right: 1px solid #E2E8F0 !important; 
     }
     
+    /* 表單區塊設計 */
     [data-testid="stForm"] {
-        border: 1px solid #D6D4CE !important;
-        background-color: #FDFDFD !important;
-        border-radius: 4px;
-        padding: 20px;
+        border: 1px solid #E2E8F0 !important;
+        background-color: #FFFFFF !important;
+        border-radius: 8px;
+        padding: 24px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.02); /* 加入極淡的陰影增加立體感 */
     }
     
-    /* 一般按鈕 (鼠尾草綠) */
+    /* 一般按鈕 (深藏青色) */
     .stButton > button, [data-testid="stFormSubmitButton"] > button { 
-        background-color: #8A9A92 !important;
+        background-color: #1E293B !important;
         color: #FFFFFF !important; 
         border: none !important;
-        border-radius: 4px !important; 
+        border-radius: 6px !important; 
         width: 100%; 
-        transition: 0.3s;
+        font-weight: 500 !important;
+        letter-spacing: 1px;
+        transition: all 0.2s ease-in-out;
     }
     .stButton > button:hover, [data-testid="stFormSubmitButton"] > button:hover {
-        background-color: #72827A !important;
+        background-color: #334155 !important;
+        transform: translateY(-1px); /* 懸浮時微微上浮 */
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
     }
 
-    /* 重新整理與儲存按鈕 (淡雅灰) */
+    /* 重新整理與儲存按鈕 (優雅灰) */
     .btn-secondary > button {
-        background-color: #C0BFB8 !important;
+        background-color: #94A3B8 !important;
         color: #FFFFFF !important;
     }
     .btn-secondary > button:hover {
-        background-color: #A8A7A0 !important;
+        background-color: #64748B !important;
     }
     
-    .stTable { font-size: 14px; }
+    /* 表格設計 */
+    .stTable { font-size: 14.5px; }
     th {
-        background-color: #E3E1DB !important;
-        color: #4A4C4B !important;
-        border-bottom: 2px solid #C0BFB8 !important;
+        background-color: #F1F5F9 !important; /* 乾淨的表頭底色 */
+        color: #334155 !important;
+        border-bottom: 2px solid #CBD5E1 !important;
+        font-weight: 700 !important;
     }
-    td { border-bottom: 1px solid #EAE8E3 !important; }
+    td { border-bottom: 1px solid #F1F5F9 !important; }
     th, td {
         white-space: pre-wrap !important; 
-        vertical-align: top !important;
-        line-height: 1.8 !important;
+        vertical-align: middle !important;
+        line-height: 1.6 !important;
         text-align: left !important;
+        padding: 10px 12px !important;
     }
     </style>
     """, unsafe_allow_html=True)
