@@ -84,7 +84,7 @@ st.markdown("""
 
 # --- 核心工具函式 ---
 def smart_read_sheet(file):
-    # 專為「系秘」模式修改的智慧讀取引擎，完全隔離，不影響醫院代表模式
+    # 這個超級引擎現在同時為「醫院代表」和「系秘」服務
     try:
         # 1. 支援 CSV 與 Excel
         if file.name.endswith('.csv'):
@@ -112,7 +112,7 @@ def smart_read_sheet(file):
         else:
             df = pd.read_excel(file, sheet_name=target_sheet, header=header_idx)
         
-        # 3. 清理與統一欄位名稱
+        # 3. 清理與統一欄位名稱 (包含對「科別」的相容)
         cols = []
         for c in df.columns:
             c_str = str(c).strip().replace('\n', '').replace(' ', '')
@@ -120,12 +120,13 @@ def smart_read_sheet(file):
                 cols.append("姓名")
             elif "期間" in c_str:
                 cols.append("實習期間")
+            elif "科別" in c_str or "科" in c_str:
+                cols.append("科別")
             else:
                 cols.append(c_str)
         df.columns = cols
         
         # 4. 針對你的新格式：自動將「開始日期」與「結束日期」合併為一格「實習期間」
-        # 【關鍵修復】：將 YYYY-MM-DD 強制轉為 YYYY/MM/DD，避免底層日期解析引擎踩雷
         start_col = next((c for c in df.columns if "開始" in str(c) and "日期" in str(c)), None)
         end_col = next((c for c in df.columns if "結束" in str(c) and "日期" in str(c)), None)
         
@@ -136,7 +137,7 @@ def smart_read_sheet(file):
                 try:
                     return pd.to_datetime(val).strftime('%Y/%m/%d')
                 except:
-                    # 如果不能轉為 datetime，至少確保把破折號轉成斜線
+                    # 確保將破折號轉為底層系統認得的斜線
                     return str(val).replace('-', '/')
                     
             df["實習期間"] = df.apply(
@@ -150,7 +151,7 @@ def smart_read_sheet(file):
         return None
 
 def extract_dates_universal(text, year=2026):
-    """終極日期解析引擎：強殺換行符號與缺零日期"""
+    """終極日期解析引擎"""
     if isinstance(text, datetime): return text, text
     text = str(text).replace('\n', '-').replace('\r', '-').replace(' ', '').strip()
     parts = re.split(r'[-~～到至_]+', text)
@@ -185,11 +186,10 @@ st.sidebar.markdown('<div class="btn-secondary">', unsafe_allow_html=True)
 if st.sidebar.button("重新整理系統"): st.rerun()
 st.sidebar.markdown('</div>', unsafe_allow_html=True)
 
-# --- 醫院代表模式 (完全無更動版本) ---
+# --- 醫院代表模式 ---
 if mode == "醫院代表":
     st.title("醫院內部容額與規章審核")
     
-    # 區塊一：設定與儲存
     with st.form("settings_form"):
         st.markdown("### 規則設定")
         c_cfg1, c_cfg2, c_cfg3 = st.columns([1, 1, 1])
@@ -209,11 +209,11 @@ if mode == "醫院代表":
 
     st.divider()
     
-    # 區塊二：檔案上傳與比對
     st.markdown("### 檔案上傳與比對")
     c1, c2 = st.columns(2)
-    with c1: q_file = st.file_uploader("上傳醫院容額表", type=['xlsx'])
-    with c2: a_file = st.file_uploader("上傳學生志願表", type=['xlsx'])
+    # 開放讓醫院代表也可以上傳 CSV
+    with c1: q_file = st.file_uploader("上傳醫院容額表", type=['xlsx', 'csv'])
+    with c2: a_file = st.file_uploader("上傳學生志願表", type=['xlsx', 'csv'])
     run_check = st.button("確認並開始比對")
 
     if run_check and q_file and a_file:
@@ -221,30 +221,25 @@ if mode == "醫院代表":
         total_min_workdays = st.session_state.min_weeks_req * 5
         
         try:
-            xls_q = pd.ExcelFile(q_file)
-            try: sn_q = [s for s in xls_q.sheet_names if "容額" in s or "時段" in s][0]
-            except: sn_q = xls_q.sheet_names[0]
-            df_q = pd.read_excel(q_file, sheet_name=sn_q, header=4)
+            # 容額表讀取 (相容 CSV 或 Excel)
+            if q_file.name.endswith('.csv'):
+                df_q = pd.read_csv(q_file, header=4)
+            else:
+                xls_q = pd.ExcelFile(q_file)
+                try: sn_q = [s for s in xls_q.sheet_names if "容額" in s or "時段" in s][0]
+                except: sn_q = xls_q.sheet_names[0]
+                df_q = pd.read_excel(q_file, sheet_name=sn_q, header=4)
             df_q.columns = [str(c).strip() for c in df_q.columns]
 
-            xls_a = pd.ExcelFile(a_file)
-            try: sn_a = [s for s in xls_a.sheet_names if "志願" in s][0]
-            except: sn_a = xls_a.sheet_names[0]
-            df_temp = pd.read_excel(a_file, sheet_name=sn_a)
-            header_idx = 0
-            for i in range(min(len(df_temp), 15)):
-                row = [str(x).strip() for x in df_temp.iloc[i].values]
-                if any(k in row for k in ["姓名", "科別", "申請科別"]):
-                    header_idx = i + 1
-                    break
-            df_a = pd.read_excel(a_file, sheet_name=sn_a, header=header_idx)
-            df_a.columns = [str(c).strip() for c in df_a.columns]
+            # 【關鍵修復】: 將強大的 smart_read_sheet 套用到學生志願表上
+            df_a = smart_read_sheet(a_file)
 
             if df_q is not None and df_a is not None:
                 if '姓名' in df_a.columns: df_a['姓名'] = df_a['姓名'].ffill()
                 
                 apps = []
-                dept_col = "申請科別" if "申請科別" in df_a.columns else "科別"
+                # smart_read_sheet 已經統一將欄位名稱洗成 "科別"
+                dept_col = "科別" if "科別" in df_a.columns else "申請科別"
                 for _, row in df_a.iterrows():
                     if pd.notna(row.get(dept_col)) and pd.notna(row.get('實習期間')):
                         s, e, d = parse_period_dates(row['實習期間'])
