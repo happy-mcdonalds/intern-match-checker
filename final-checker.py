@@ -181,9 +181,6 @@ if mode == "醫院代表":
             except: sn_q = xls_q.sheet_names[0]
             df_q = pd.read_excel(q_file, sheet_name=sn_q, header=4)
             df_q.columns = [str(c).strip() for c in df_q.columns]
-            # ⭐ 修正第一個時段欄位被吃掉（5/4-5/8 → Unnamed: 2）
-            if "Unnamed: 2" in df_q.columns:
-            df_q = df_q.rename(columns={"Unnamed: 2": "5/4-5/8"})
 
             xls_a = pd.ExcelFile(a_file)
             try: sn_a = [s for s in xls_a.sheet_names if "志願" in s][0]
