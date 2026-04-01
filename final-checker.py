@@ -164,7 +164,7 @@ if mode == "醫院代表":
 
                 st.header("異常監控結果")
                 if collisions:
-                    st.subheader("⚠️ 名額撞期名單 (超額佔位)")
+                    st.subheader("名額撞期")
                     st.table(pd.DataFrame(collisions))
                 if invalid:
                     pass
@@ -218,7 +218,7 @@ elif mode == "系秘":
                         })
                         
             if conflicts:
-                st.subheader("⚠️ 偵測到跨院衝突名單")
+                st.subheader("偵測到跨院衝突名單")
                 df_conflicts = pd.DataFrame(conflicts)
                 # 設定 Index 去除最左邊預設數字
                 st.table(df_conflicts.set_index('姓名'))
