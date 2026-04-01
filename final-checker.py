@@ -14,7 +14,7 @@ if "require_cont" not in st.session_state:
 # 頁面基本設定
 st.set_page_config(page_title="醫學系實習選配管理系統", layout="wide")
 
-# --- 專屬襯線體 + 溫暖莫蘭迪色系 + 中文化上傳區塊 CSS ---
+# --- 專屬襯線體 + 溫暖莫蘭迪色系 + 強制中文化上傳區塊 CSS ---
 st.markdown("""
     <style>
     /* 1. 載入 Google 思源宋體 (Noto Serif TC) */
@@ -96,60 +96,82 @@ st.markdown("""
         padding: 10px 12px !important;
     }
     
-    /* ======= 【新增】檔案上傳區塊中文化與美化 ======= */
+    /* ======= 【最強制】檔案上傳區塊中文化與修復超出格子 ======= */
+    
+    /* 確保外框絕對不會超出格子 */
     [data-testid="stFileUploadDropzone"] {
         background-color: #FFFFFF !important;
         border: 1px dashed #C0BFB8 !important;
         border-radius: 8px !important;
-        padding: 20px !important;
+        padding: 15px !important;
+        width: 100% !important; /* 嚴格限制寬度 */
+        box-sizing: border-box !important;
+        overflow: hidden !important;
         transition: 0.3s;
     }
     [data-testid="stFileUploadDropzone"]:hover {
-        border-color: #8A9A92 !important; /* 游標滑過時變成鼠尾草綠框 */
+        border-color: #8A9A92 !important; 
         background-color: #FBFBFA !important;
     }
     
-    /* 1. 隱藏原本的英文字與限制說明 */
-    [data-testid="stFileUploadDropzone"] > div:first-child span {
-        display: none !important;
+    /* 1. 殺手鐧：將原本的說明文字字體設為 0，讓它徹底消失 */
+    [data-testid="stFileUploadDropzone"] > div:first-child * {
+        font-size: 0px !important;
+        color: transparent !important;
     }
-    [data-testid="stFileUploadDropzone"] > div:first-child small {
-        display: none !important;
+    
+    /* 將預設的雲朵 icon 改成鼠尾草綠 */
+    [data-testid="stFileUploadDropzone"] svg {
+        fill: #8A9A92 !important;
+        width: 35px !important;
+        height: 35px !important;
     }
     
     /* 2. 注入自訂的中文說明 */
-    [data-testid="stFileUploadDropzone"] > div:first-child::before {
-        content: "拖曳檔案至此，或點擊選擇檔案";
+    [data-testid="stFileUploadDropzone"] > div:first-child::after {
+        content: "拖曳檔案至此，或點擊下方按鈕";
         display: block;
-        color: #5C5E5D;
-        font-size: 16px;
+        color: #5C5E5D !important;
+        font-size: 15px !important;
         font-weight: 600;
-        margin-bottom: 10px;
+        margin-top: 10px;
+        margin-bottom: 15px;
     }
     
-    /* 3. 修改「Browse files」按鈕為中文 */
+    /* 3. 處理 Browse files 按鈕 */
     [data-testid="stFileUploadDropzone"] button {
-        color: transparent !important; /* 隱藏原本的字 */
-        background-color: #F6F5F2 !important;
-        border: 1px solid #D6D4CE !important;
-        border-radius: 4px !important;
-        box-shadow: none !important;
-        position: relative;
-        min-width: 100px;
+        position: relative !important;
+        width: 100% !important;
+        max-width: 160px !important;
+        margin: 0 auto !important; /* 置中 */
+        border: none !important;
+        background: transparent !important;
     }
-    [data-testid="stFileUploadDropzone"] button:hover {
-        background-color: #EAE8E3 !important;
-        border-color: #C0BFB8 !important;
+    
+    /* 隱藏按鈕內的原始文字 */
+    [data-testid="stFileUploadDropzone"] button * {
+        display: none !important;
     }
-    [data-testid="stFileUploadDropzone"] button::after {
+    
+    /* 覆蓋上我們自己的中文按鈕 */
+    [data-testid="stFileUploadDropzone"] button::before {
         content: "選擇檔案";
         position: absolute;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
+        top: 0; left: 0; right: 0; bottom: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background-color: #EAE8E3 !important;
         color: #4A4C4B !important;
         font-size: 14px;
         font-weight: 600;
+        border-radius: 4px;
+        border: 1px solid #D6D4CE !important;
+        transition: 0.3s;
+    }
+    
+    [data-testid="stFileUploadDropzone"] button:hover::before {
+        background-color: #D6D4CE !important;
     }
     </style>
     """, unsafe_allow_html=True)
