@@ -6,7 +6,7 @@ import re
 # 頁面基本設定
 st.set_page_config(page_title="醫學系實習選配管理系統", layout="wide")
 
-# --- 高級感 CSS (宋體 + 黑白灰) ---
+# --- 高級感 CSS (宋體 + 黑白灰 + 強制不換行) ---
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;700&display=swap');
@@ -18,18 +18,22 @@ st.markdown("""
     .stApp { background-color: #FFFFFF; }
     section[data-testid="stSidebar"] { background-color: #FFFFFF; border-right: 1px solid #DDDDDD; }
     .stButton>button { color: #FFFFFF !important; background-color: #000000 !important; border-radius: 0px; width: 100%; }
+    
+    /* 表格專屬設定：縮小字體並強制絕對不換行 */
     .stTable { font-size: 14px; }
+    .stTable td, .stTable th {
+        white-space: nowrap !important;
+    }
     </style>
     """, unsafe_allow_html=True)
 
 # --- 核心工具函式 ---
 def smart_read_sheet(file):
-    """專供系秘模式使用的自動定位讀取 (容錯率高)"""
     try:
         xls = pd.ExcelFile(file)
         target_sheet = xls.sheet_names[0]
         for sn in xls.sheet_names:
-            if any(k in sn for k in ["志願", "名單", "工作表4", "Sheet1"]):
+            if any(k in sn for k in ["志願", "名單", "工作表4", "實習容額"]):
                 target_sheet = sn
                 break
         df_temp = pd.read_excel(file, sheet_name=target_sheet)
@@ -66,7 +70,7 @@ st.sidebar.title("系統模式")
 mode = st.sidebar.radio("身份選擇", ["醫院代表", "系秘"])
 st.sidebar.divider()
 
-# --- 模式：醫院代表 ---
+# --- 醫院代表模式 ---
 if mode == "醫院代表":
     st.title("醫院內部容額與規章審核")
     
@@ -86,24 +90,17 @@ if mode == "醫院代表":
 
     if q_file and a_file:
         try:
-            # ！！！ 嚴格採用分頁讀取 ！！！
-            # 1. 讀取容額表：嚴格鎖定「容額」或「時段」分頁，並且固定 header=4
+            # 1. 嚴格鎖定容額表 Header=4
             xls_q = pd.ExcelFile(q_file)
-            try:
-                sn_q = [s for s in xls_q.sheet_names if "容額" in s or "時段" in s][0]
-            except:
-                sn_q = xls_q.sheet_names[0]
+            try: sn_q = [s for s in xls_q.sheet_names if "容額" in s or "時段" in s][0]
+            except: sn_q = xls_q.sheet_names[0]
             df_q = pd.read_excel(q_file, sheet_name=sn_q, header=4)
             df_q.columns = [str(c).strip() for c in df_q.columns]
 
-            # 2. 讀取志願表：嚴格鎖定「志願」分頁
+            # 2. 讀取志願表
             xls_a = pd.ExcelFile(a_file)
-            try:
-                sn_a = [s for s in xls_a.sheet_names if "志願" in s][0]
-            except:
-                sn_a = xls_a.sheet_names[0]
-            
-            # 使用動態 header 確保能抓到「姓名」欄位
+            try: sn_a = [s for s in xls_a.sheet_names if "志願" in s][0]
+            except: sn_a = xls_a.sheet_names[0]
             df_temp = pd.read_excel(a_file, sheet_name=sn_a)
             header_idx = 0
             for i in range(min(len(df_temp), 15)):
@@ -124,7 +121,6 @@ if mode == "醫院代表":
                         s, e, d = parse_period_dates(row['實習期間'])
                         if s: apps.append({'姓名': row['姓名'], '科別': str(row[dept_col]).strip(), '開始': s, '結束': e, '天數': d})
                 
-                # 執行精準碰撞偵測
                 date_cols = [c for c in df_q.columns if '-' in c and any(i.isdigit() for i in c)]
                 collisions = []
                 for _, q_row in df_q.iterrows():
@@ -144,7 +140,6 @@ if mode == "醫院代表":
                             st_in_slot = []
                             for a in apps:
                                 if a['科別'] == dept:
-                                    # 嚴格重疊演算法：只要有交集就算
                                     if a['開始'] <= e_slot and a['結束'] >= s_slot:
                                         st_in_slot.append(a['姓名'])
                             
@@ -225,6 +220,7 @@ elif mode == "系秘":
             if conflicts:
                 st.subheader("⚠️ 偵測到跨院衝突名單")
                 df_conflicts = pd.DataFrame(conflicts)
+                # 設定 Index 去除最左邊預設數字
                 st.table(df_conflicts.set_index('姓名'))
             else: 
                 st.success("無重複佔位。")
