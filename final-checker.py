@@ -14,10 +14,10 @@ if "require_cont" not in st.session_state:
 # 頁面基本設定
 st.set_page_config(page_title="醫學系實習選配管理系統", layout="wide")
 
-# --- 專屬襯線體 + 溫暖莫蘭迪色系 CSS ---
+# --- 專屬襯線體 + 溫暖莫蘭迪色系 + 中文化上傳區塊 CSS ---
 st.markdown("""
     <style>
-    /* 1. 載入 Google 思源宋體 (Noto Serif TC)，引入一般(400)與粗體(600, 700) */
+    /* 1. 載入 Google 思源宋體 (Noto Serif TC) */
     @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;600;700&display=swap');
     
     /* 2. 【關鍵】使用星號 (*) 強制覆蓋 Streamlit 所有底層元件的字體 */
@@ -27,25 +27,25 @@ st.markdown("""
     
     /* 溫暖柔和的莫蘭迪背景 */
     html, body, [class*="css"], [data-testid="stAppViewContainer"], .stApp {
-        background-color: #F6F5F2 !important; /* 柔和的燕麥白 */
-        color: #5C5E5D !important; /* 深炭灰，閱讀舒適 */
+        background-color: #F6F5F2 !important; 
+        color: #5C5E5D !important; 
     }
     
     /* 標題設定 */
     h1, h2, h3 { 
-        color: #3B4441 !important; /* 深灰綠色 */
+        color: #3B4441 !important; 
         border-bottom: 2px solid #D6D4CE; 
         padding-bottom: 8px;
-        font-weight: 700 !important; /* 讓宋體的標題夠粗才好看 */
+        font-weight: 700 !important; 
     }
     
     /* 側邊欄 */
     section[data-testid="stSidebar"] { 
-        background-color: #EAE8E3 !important; /* 暖灰底色 */
+        background-color: #EAE8E3 !important; 
         border-right: 1px solid #D6D4CE !important; 
     }
     
-    /* 表單區塊設計（加入極微的圓角與陰影，增加立體感） */
+    /* 表單區塊設計 */
     [data-testid="stForm"] {
         border: 1px solid #D6D4CE !important;
         background-color: #FFFFFF !important;
@@ -62,7 +62,7 @@ st.markdown("""
         border-radius: 6px !important; 
         width: 100%; 
         font-size: 16px !important;
-        font-weight: 600 !important; /* 宋體在按鈕上需要稍微加粗才清楚 */
+        font-weight: 600 !important; 
         transition: 0.3s;
     }
     .stButton > button:hover, [data-testid="stFormSubmitButton"] > button:hover {
@@ -82,7 +82,7 @@ st.markdown("""
     /* 表格設計 */
     .stTable { font-size: 15px; }
     th {
-        background-color: #E6E4DF !important; /* 表頭暖灰色 */
+        background-color: #E6E4DF !important; 
         color: #4A4C4B !important;
         border-bottom: 2px solid #C0BFB8 !important;
         font-weight: 700 !important;
@@ -94,6 +94,62 @@ st.markdown("""
         line-height: 1.6 !important;
         text-align: left !important;
         padding: 10px 12px !important;
+    }
+    
+    /* ======= 【新增】檔案上傳區塊中文化與美化 ======= */
+    [data-testid="stFileUploadDropzone"] {
+        background-color: #FFFFFF !important;
+        border: 1px dashed #C0BFB8 !important;
+        border-radius: 8px !important;
+        padding: 20px !important;
+        transition: 0.3s;
+    }
+    [data-testid="stFileUploadDropzone"]:hover {
+        border-color: #8A9A92 !important; /* 游標滑過時變成鼠尾草綠框 */
+        background-color: #FBFBFA !important;
+    }
+    
+    /* 1. 隱藏原本的英文字與限制說明 */
+    [data-testid="stFileUploadDropzone"] > div:first-child span {
+        display: none !important;
+    }
+    [data-testid="stFileUploadDropzone"] > div:first-child small {
+        display: none !important;
+    }
+    
+    /* 2. 注入自訂的中文說明 */
+    [data-testid="stFileUploadDropzone"] > div:first-child::before {
+        content: "拖曳檔案至此，或點擊選擇檔案";
+        display: block;
+        color: #5C5E5D;
+        font-size: 16px;
+        font-weight: 600;
+        margin-bottom: 10px;
+    }
+    
+    /* 3. 修改「Browse files」按鈕為中文 */
+    [data-testid="stFileUploadDropzone"] button {
+        color: transparent !important; /* 隱藏原本的字 */
+        background-color: #F6F5F2 !important;
+        border: 1px solid #D6D4CE !important;
+        border-radius: 4px !important;
+        box-shadow: none !important;
+        position: relative;
+        min-width: 100px;
+    }
+    [data-testid="stFileUploadDropzone"] button:hover {
+        background-color: #EAE8E3 !important;
+        border-color: #C0BFB8 !important;
+    }
+    [data-testid="stFileUploadDropzone"] button::after {
+        content: "選擇檔案";
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        color: #4A4C4B !important;
+        font-size: 14px;
+        font-weight: 600;
     }
     </style>
     """, unsafe_allow_html=True)
