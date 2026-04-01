@@ -14,79 +14,77 @@ if "require_cont" not in st.session_state:
 # 頁面基本設定
 st.set_page_config(page_title="醫學系實習選配管理系統", layout="wide")
 
-# --- 高級感行政極簡風 + 現代黑體 CSS ---
+# --- 升級版：溫暖莫蘭迪色系 + 強制系統原生黑體 CSS ---
 st.markdown("""
     <style>
-    /* 引入思源黑體 (Noto Sans TC)，提供 400(一般), 500(中等), 700(粗體) */
-    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap');
+    /* 強制全局字體：優先使用系統內建高畫質黑體，最穩定且不需下載 */
+    * {
+        font-family: "PingFang TC", "蘋果蘋方", "Microsoft JhengHei", "微軟正黑體", "Helvetica Neue", sans-serif !important;
+    }
     
-    /* 全局字體與背景設定 */
+    /* 溫暖柔和的莫蘭迪背景 */
     html, body, [class*="css"], [data-testid="stAppViewContainer"], .stApp {
-        font-family: 'PingFang TC', 'Noto Sans TC', 'Microsoft JhengHei', 'Helvetica Neue', sans-serif !important;
-        background-color: #F8FAFC !important; /* 極淺的灰藍底色，高階 SaaS 常用 */
-        color: #1E293B !important; /* 深石板灰，比純黑更有質感 */
-        -webkit-font-smoothing: antialiased; /* 讓字體在 Mac/iOS 上更平滑 */
+        background-color: #F6F5F2 !important; /* 柔和的燕麥白 */
+        color: #5C5E5D !important; /* 深炭灰，閱讀舒適 */
     }
     
-    /* 標題設計 */
+    /* 標題設定 */
     h1, h2, h3 { 
-        color: #0F172A !important; /* 更深的午夜藍 */
-        border-bottom: 2px solid #E2E8F0; 
+        color: #3B4441 !important; /* 深灰綠色 */
+        border-bottom: 2px solid #D6D4CE; 
         padding-bottom: 8px;
-        font-weight: 700;
-        letter-spacing: 0.5px;
+        font-weight: bold;
     }
     
-    /* 側邊欄設計 */
+    /* 側邊欄 */
     section[data-testid="stSidebar"] { 
-        background-color: #FFFFFF !important; /* 側邊欄純白，凸顯層次 */
-        border-right: 1px solid #E2E8F0 !important; 
+        background-color: #EAE8E3 !important; /* 暖灰底色 */
+        border-right: 1px solid #D6D4CE !important; 
     }
     
-    /* 表單區塊設計 */
+    /* 表單區塊設計（加入極微的圓角與陰影，增加立體感） */
     [data-testid="stForm"] {
-        border: 1px solid #E2E8F0 !important;
+        border: 1px solid #D6D4CE !important;
         background-color: #FFFFFF !important;
         border-radius: 8px;
         padding: 24px;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.02); /* 加入極淡的陰影增加立體感 */
+        box-shadow: 0 2px 6px rgba(0,0,0,0.03);
     }
     
-    /* 一般按鈕 (深藏青色) */
+    /* 一般按鈕 (恢復經典鼠尾草綠) */
     .stButton > button, [data-testid="stFormSubmitButton"] > button { 
-        background-color: #1E293B !important;
+        background-color: #8A9A92 !important;
         color: #FFFFFF !important; 
         border: none !important;
         border-radius: 6px !important; 
         width: 100%; 
-        font-weight: 500 !important;
-        letter-spacing: 1px;
-        transition: all 0.2s ease-in-out;
+        font-size: 16px !important;
+        font-weight: bold !important;
+        transition: 0.3s;
     }
     .stButton > button:hover, [data-testid="stFormSubmitButton"] > button:hover {
-        background-color: #334155 !important;
-        transform: translateY(-1px); /* 懸浮時微微上浮 */
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        background-color: #72827A !important;
+        transform: translateY(-1px);
     }
 
-    /* 重新整理與儲存按鈕 (優雅灰) */
+    /* 重新整理與儲存按鈕 (淡雅灰) */
     .btn-secondary > button {
-        background-color: #94A3B8 !important;
+        background-color: #C0BFB8 !important;
         color: #FFFFFF !important;
     }
     .btn-secondary > button:hover {
-        background-color: #64748B !important;
+        background-color: #A8A7A0 !important;
     }
     
     /* 表格設計 */
-    .stTable { font-size: 14.5px; }
+    .stTable { font-size: 15px; }
     th {
-        background-color: #F1F5F9 !important; /* 乾淨的表頭底色 */
-        color: #334155 !important;
-        border-bottom: 2px solid #CBD5E1 !important;
-        font-weight: 700 !important;
+        background-color: #E6E4DF !important; /* 表頭暖灰色 */
+        color: #4A4C4B !important;
+        border-bottom: 2px solid #C0BFB8 !important;
+        font-weight: bold !important;
     }
-    td { border-bottom: 1px solid #F1F5F9 !important; }
+    td { border-bottom: 1px solid #F6F5F2 !important; }
     th, td {
         white-space: pre-wrap !important; 
         vertical-align: middle !important;
