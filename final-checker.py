@@ -261,12 +261,12 @@ if mode == "醫院代表":
                                     invalid.append({"姓名": name, "原因": f"未連續實習：{courses[i]['科別']} 與 {courses[i+1]['科別']} 中斷"})
                                     break 
 
-                st.header("異常監控結果")
+                st.header("異常名單")
                 if collisions:
-                    st.subheader("名額撞期名單")
+                    st.subheader("撞期名單")
                     st.table(pd.DataFrame(collisions))
                 if invalid:
-                    st.subheader("規章不符名單")
+                    st.subheader("不符規章名單")
                     st.table(pd.DataFrame(invalid).drop_duplicates())
                 if not collisions and not invalid:
                     st.success("名額分配與規章核對完全符合規定。")
