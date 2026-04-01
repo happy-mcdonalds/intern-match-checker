@@ -64,12 +64,15 @@ def parse_date_simple(s, year=2026):
     return None
 
 def parse_period_dates(p_str):
+    """解析日期並計算精準的工作天數 (排除六日)"""
     try:
         dates = re.findall(r'\d{4}\.\d{2}\.\d{2}', str(p_str).replace('\n',''))
         if len(dates) >= 2:
             s = datetime.strptime(dates[0], "%Y.%m.%d")
             e = datetime.strptime(dates[1], "%Y.%m.%d")
-            return s, e, (e - s).days + 1
+            # 利用 pandas 計算實際工作天 (Business days)
+            workdays = len(pd.bdate_range(s, e))
+            return s, e, workdays
     except: pass
     return None, None, 0
 
@@ -82,15 +85,16 @@ st.sidebar.divider()
 if mode == "醫院代表":
     st.title("醫院內部容額與規章審核")
     
-    st.markdown("### 規則設定")
+    st.markdown("### 📋 規則設定")
     c_cfg1, c_cfg2, c_cfg3 = st.columns([1, 1, 1])
     with c_cfg1: course_dur_weeks = st.number_input("一個 Course 多久 (週)", min_value=1, value=2)
     with c_cfg2: min_weeks_req = st.number_input("最短實習週數要求 (週)", min_value=1, value=4)
     with c_cfg3: require_cont = st.checkbox("要求必須連續實習", value=True)
     st.divider()
 
-    course_days = course_dur_weeks * 5
-    total_min_days = min_weeks_req * 5
+    # 換算為嚴格工作天數 (1週 = 5個工作天)
+    course_workdays = course_dur_weeks * 5
+    total_min_workdays = min_weeks_req * 5
 
     c1, c2 = st.columns(2)
     with c1: q_file = st.file_uploader("1. 上傳醫院容額表", type=['xlsx'], key="h_q")
@@ -129,6 +133,7 @@ if mode == "醫院代表":
                         s, e, d = parse_period_dates(row['實習期間'])
                         if s: apps.append({'姓名': row['姓名'], '科別': str(row[dept_col]).strip(), '開始': s, '結束': e, '天數': d})
                 
+                # --- 碰撞偵測 ---
                 date_cols = [c for c in df_q.columns if '-' in c and any(i.isdigit() for i in c)]
                 collisions = []
                 for _, q_row in df_q.iterrows():
@@ -159,26 +164,45 @@ if mode == "醫院代表":
                                     "超額學生": "、".join(list(set(st_in_slot)))
                                 })
 
+                # --- 規章嚴格審核 ---
                 invalid = []
                 if apps:
                     df_temp = pd.DataFrame(apps)
                     for name, group in df_temp.groupby('姓名'):
-                        total_days = group['天數'].sum()
+                        # 依照開始時間排序，確保連續性檢查正確
+                        group = group.sort_values('開始')
+                        total_workdays = group['天數'].sum()
+                        
+                        # 1. 檢查單一 Course 天數
                         for _, row in group.iterrows():
-                            if row['天數'] < (course_dur_weeks * 7 - 2): 
-                                pass 
-                        if total_days < (min_weeks_req * 7 - 4):
-                            invalid.append({"姓名": name, "原因": f"總實習時間不足"})
+                            if row['天數'] < course_workdays:
+                                invalid.append({"姓名": name, "原因": f"【Course 天數不足】 {row['科別']} 僅 {row['天數']} 個工作天 (規定需 {course_workdays} 天)"})
+                        
+                        # 2. 檢查總實習天數
+                        if total_workdays < total_min_workdays:
+                            invalid.append({"姓名": name, "原因": f"【總時長不足】 僅 {total_workdays} 個工作天 (規定需 {total_min_workdays} 天)"})
+                        
+                        # 3. 檢查是否連續實習
+                        if require_cont and len(group) > 1:
+                            courses = group.to_dict('records')
+                            for i in range(len(courses) - 1):
+                                prev_end = courses[i]['結束']
+                                next_start = courses[i+1]['開始']
+                                # 若下個開始時間晚於前一個結束時間超過 3 天 (代表中間非合理週末換科)
+                                if (next_start - prev_end).days > 3:
+                                    invalid.append({"姓名": name, "原因": f"【未連續實習】 {courses[i]['科別']} 與 {courses[i+1]['科別']} 之間出現中斷"})
+                                    break # 報一次錯誤即可
 
+                # --- 顯示結果 ---
                 st.header("異常監控結果")
                 if collisions:
-                    st.subheader("名額撞期名單")
+                    st.subheader("⚠️ 名額撞期名單 (超額佔位)")
                     st.table(pd.DataFrame(collisions))
                 if invalid:
-                    st.subheader("規章不符名單")
+                    st.subheader("📝 規章不符名單")
                     st.table(pd.DataFrame(invalid).drop_duplicates())
                 if not collisions and not invalid:
-                    st.success("名額分配與規章核對正常。")
+                    st.success("名額分配與規章核對完全符合規定。")
         except Exception as e: st.error(f"解析失敗：{e}")
 
 # --- 模式：系秘 ---
@@ -219,17 +243,15 @@ elif mode == "系秘":
                         for idx in sorted(list(conflict_set)):
                             hosp = s_apps[idx]['來源醫院']
                             period = str(s_apps[idx]['實習期間']).replace('\n', '')
-                            # 【關鍵修改】加上減號並確保這是一個獨立的項目
                             details.append(f"- {hosp} ({period})")
                         
                         conflicts.append({
                             "姓名": name,
-                            # 【關鍵修改】使用換行符號取代原本的直線
                             "衝突詳情": "\n".join(details)
                         })
                         
             if conflicts:
-                st.subheader("偵測到跨院衝突名單")
+                st.subheader("⚠️ 偵測到跨院衝突名單")
                 df_conflicts = pd.DataFrame(conflicts)
                 st.table(df_conflicts.set_index('姓名'))
             else: 
