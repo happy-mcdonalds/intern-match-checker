@@ -6,23 +6,31 @@ import re
 # 頁面基本設定
 st.set_page_config(page_title="醫學系實習選配管理系統", layout="wide")
 
-# --- 高級感 CSS (宋體 + 黑白灰 + 強制不換行) ---
+# --- 高級感 CSS (宋體 + 黑白灰 + 支援手動換行) ---
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;700&display=swap');
+    
     html, body, [class*="css"] {
         font-family: 'Noto Serif TC', 'Songti TC', serif !important;
         color: #000000;
     }
-    h1, h2, h3 { color: #000000 !important; border-bottom: 1px solid #000000; padding-bottom: 5px; }
+    h1, h2, h3 { 
+        color: #000000 !important; 
+        border-bottom: 1px solid #000000; 
+        padding-bottom: 5px; 
+    }
     .stApp { background-color: #FFFFFF; }
     section[data-testid="stSidebar"] { background-color: #FFFFFF; border-right: 1px solid #DDDDDD; }
     .stButton>button { color: #FFFFFF !important; background-color: #000000 !important; border-radius: 0px; width: 100%; }
     
-    /* 表格專屬設定：縮小字體並強制絕對不換行 */
+    /* 表格設定：支援換行符號，並讓文字垂直置中 */
     .stTable { font-size: 14px; }
-    .stTable td, .stTable th {
-        white-space: nowrap !important;
+    th, td {
+        white-space: pre-line !important; 
+        word-break: keep-all !important;
+        vertical-align: middle !important;
+        line-height: 1.6 !important;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -164,12 +172,13 @@ if mode == "醫院代表":
 
                 st.header("異常監控結果")
                 if collisions:
-                    st.subheader("名額撞期")
+                    st.subheader("名額撞期名單")
                     st.table(pd.DataFrame(collisions))
                 if invalid:
-                    pass
-                if not collisions:
-                    st.success("名額分配正常。")
+                    st.subheader("規章不符名單")
+                    st.table(pd.DataFrame(invalid).drop_duplicates())
+                if not collisions and not invalid:
+                    st.success("名額分配與規章核對正常。")
         except Exception as e: st.error(f"解析失敗：{e}")
 
 # --- 模式：系秘 ---
@@ -214,13 +223,13 @@ elif mode == "系秘":
                         
                         conflicts.append({
                             "姓名": name,
-                            "衝突詳情": " ｜ ".join(details)
+                            # 關鍵更改：用換行符號取代原本的直線
+                            "衝突詳情": "\n".join(details)
                         })
                         
             if conflicts:
                 st.subheader("偵測到跨院衝突名單")
                 df_conflicts = pd.DataFrame(conflicts)
-                # 設定 Index 去除最左邊預設數字
                 st.table(df_conflicts.set_index('姓名'))
             else: 
-                st.success("無重複佔位。")
+                st.success("無重複佔位情況。")
