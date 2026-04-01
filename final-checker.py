@@ -3,19 +3,26 @@ import pandas as pd
 from datetime import datetime, timedelta
 import re
 
+# --- 初始化系統記憶 ---
+if "course_dur_weeks" not in st.session_state:
+    st.session_state.course_dur_weeks = 2
+if "min_weeks_req" not in st.session_state:
+    st.session_state.min_weeks_req = 4
+if "require_cont" not in st.session_state:
+    st.session_state.require_cont = True
+
 # 頁面基本設定
 st.set_page_config(page_title="醫學系實習選配管理系統", layout="wide")
 
-# --- 莫蘭迪色系 + 強制純宋體 CSS (無 Emoji) ---
+# --- 莫蘭迪色系 + 強制純宋體 CSS ---
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;700&display=swap');
     
-    /* 強制全域字體與低飽和度背景 */
     html, body, [class*="css"], [data-testid="stAppViewContainer"], .stApp {
         font-family: 'Noto Serif TC', 'Songti TC', 'PMingLiU', 'MingLiU', 'SimSun', serif !important;
-        background-color: #F5F4F1 !important; /* 燕麥灰 */
-        color: #5C5E5D !important; /* 莫蘭迪炭灰 */
+        background-color: #F5F4F1 !important; 
+        color: #5C5E5D !important; 
     }
     
     h1, h2, h3 { 
@@ -25,13 +32,11 @@ st.markdown("""
         font-weight: 700;
     }
     
-    /* 側邊欄 */
     section[data-testid="stSidebar"] { 
         background-color: #EAE8E3 !important; 
         border-right: 1px solid #D6D4CE !important; 
     }
     
-    /* 表單區塊與背景融合 */
     [data-testid="stForm"] {
         border: 1px solid #D6D4CE !important;
         background-color: #FDFDFD !important;
@@ -39,8 +44,8 @@ st.markdown("""
         padding: 20px;
     }
     
-    /* 莫蘭迪主按鈕 (鼠尾草綠) */
-    [data-testid="stFormSubmitButton"] > button { 
+    /* 一般按鈕 (鼠尾草綠) */
+    .stButton > button, [data-testid="stFormSubmitButton"] > button { 
         background-color: #8A9A92 !important; 
         color: #FFFFFF !important; 
         border: none !important;
@@ -48,33 +53,26 @@ st.markdown("""
         width: 100%; 
         transition: 0.3s;
     }
-    [data-testid="stFormSubmitButton"] > button:hover {
+    .stButton > button:hover, [data-testid="stFormSubmitButton"] > button:hover {
         background-color: #72827A !important;
     }
 
-    /* 重新整理按鈕 (淡雅灰) */
-    .btn-reset > button {
+    /* 重新整理與儲存按鈕 (淡雅灰) */
+    .btn-secondary > button {
         background-color: #C0BFB8 !important;
         color: #FFFFFF !important;
-        border: none !important;
-        border-radius: 4px !important;
-        width: 100%;
-        transition: 0.3s;
     }
-    .btn-reset > button:hover {
+    .btn-secondary > button:hover {
         background-color: #A8A7A0 !important;
     }
     
-    /* 表格設定：條列式支援、垂直置上 */
     .stTable { font-size: 14px; }
     th {
         background-color: #E3E1DB !important;
         color: #4A4C4B !important;
         border-bottom: 2px solid #C0BFB8 !important;
     }
-    td {
-        border-bottom: 1px solid #EAE8E3 !important;
-    }
+    td { border-bottom: 1px solid #EAE8E3 !important; }
     th, td {
         white-space: pre-wrap !important; 
         vertical-align: top !important; 
@@ -105,39 +103,30 @@ def smart_read_sheet(file):
         return df
     except: return None
 
-def get_slot_dates(c, year=2026):
-    """裝甲級表頭日期擷取：處理各種 Excel 靈異格式"""
-    if isinstance(c, datetime):
-        return c, c
-    s = str(c).strip()
-    if re.match(r'^\d{4}-\d{2}-\d{2}', s):
-        try:
-            dt = datetime.strptime(s[:10], "%Y-%m-%d")
-            return dt, dt
-        except: pass
-        
-    parts = re.split(r'[-~～到至_]+', s)
-    def extract_md(text):
-        nums = re.findall(r'\d+', text)
+def extract_dates_universal(text, year=2026):
+    """終極日期解析引擎：強殺換行符號與缺零日期"""
+    if isinstance(text, datetime): return text, text
+    # 關鍵：強制把 Excel 內的換行符號 \n 轉換為破折號
+    text = str(text).replace('\n', '-').replace('\r', '-').replace(' ', '').strip()
+    parts = re.split(r'[-~～到至_]+', text)
+    
+    def extract_single_date(part):
+        nums = re.findall(r'\d+', part)
         if len(nums) >= 2:
             if len(nums[0]) == 4 and len(nums) >= 3:
                 return datetime(int(nums[0]), int(nums[1]), int(nums[2]))
             return datetime(year, int(nums[-2]), int(nums[-1]))
         return None
         
-    dates = [extract_md(p) for p in parts if extract_md(p) is not None]
-    if len(dates) == 1:
-        return dates[0], dates[0]
-    elif len(dates) >= 2:
-        return dates[0], dates[-1]
+    dates = [extract_single_date(p) for p in parts if extract_single_date(p) is not None]
+    if len(dates) == 1: return dates[0], dates[0]
+    elif len(dates) >= 2: return dates[0], dates[-1]
     return None, None
 
 def parse_period_dates(p_str):
     try:
-        dates = re.findall(r'\d{4}\.\d{2}\.\d{2}', str(p_str).replace('\n',''))
-        if len(dates) >= 2:
-            s = datetime.strptime(dates[0], "%Y.%m.%d")
-            e = datetime.strptime(dates[1], "%Y.%m.%d")
+        s, e = extract_dates_universal(p_str)
+        if s and e:
             workdays = len(pd.bdate_range(s, e))
             return s, e, workdays
     except: pass
@@ -147,7 +136,7 @@ def parse_period_dates(p_str):
 st.sidebar.title("系統模式")
 mode = st.sidebar.radio("身份選擇", ["醫院代表", "系秘"])
 st.sidebar.divider()
-st.sidebar.markdown('<div class="btn-reset">', unsafe_allow_html=True)
+st.sidebar.markdown('<div class="btn-secondary">', unsafe_allow_html=True)
 if st.sidebar.button("重新整理系統"): st.rerun()
 st.sidebar.markdown('</div>', unsafe_allow_html=True)
 
@@ -155,35 +144,44 @@ st.sidebar.markdown('</div>', unsafe_allow_html=True)
 if mode == "醫院代表":
     st.title("醫院內部容額與規章審核")
     
-    # 將所有設定與上傳整合在一個表單內，按下確認才執行
-    with st.form("hospital_form"):
-        st.markdown("### 規則設定與檔案上傳")
+    # 區塊一：設定與儲存
+    with st.form("settings_form"):
+        st.markdown("### 規則設定")
         c_cfg1, c_cfg2, c_cfg3 = st.columns([1, 1, 1])
-        with c_cfg1: course_dur_weeks = st.number_input("一個 Course 多久 (週)", min_value=1, value=2)
-        with c_cfg2: min_weeks_req = st.number_input("最短實習週數要求 (週)", min_value=1, value=4)
-        with c_cfg3: require_cont = st.checkbox("要求必須連續實習", value=True)
-        st.divider()
+        with c_cfg1: cd_val = st.number_input("一個 Course 多久 (週)", min_value=1, value=st.session_state.course_dur_weeks)
+        with c_cfg2: mw_val = st.number_input("最短實習週數要求 (週)", min_value=1, value=st.session_state.min_weeks_req)
+        with c_cfg3: rc_val = st.checkbox("要求必須連續實習", value=st.session_state.require_cont)
+        
+        st.markdown('<div class="btn-secondary">', unsafe_allow_html=True)
+        save_btn = st.form_submit_button("儲存條件")
+        st.markdown('</div>', unsafe_allow_html=True)
+        
+        if save_btn:
+            st.session_state.course_dur_weeks = cd_val
+            st.session_state.min_weeks_req = mw_val
+            st.session_state.require_cont = rc_val
+            st.success("條件已儲存！請接續上傳檔案。")
 
-        c1, c2 = st.columns(2)
-        with c1: q_file = st.file_uploader("1. 上傳醫院容額表", type=['xlsx'])
-        with c2: a_file = st.file_uploader("2. 上傳學生志願表", type=['xlsx'])
-
-        # 這裡就是你的「確認按鈕」
-        run_check = st.form_submit_button("確認設定並開始比對")
+    st.divider()
+    
+    # 區塊二：檔案上傳與比對
+    st.markdown("### 檔案上傳與比對")
+    c1, c2 = st.columns(2)
+    with c1: q_file = st.file_uploader("上傳醫院容額表", type=['xlsx'])
+    with c2: a_file = st.file_uploader("上傳學生志願表", type=['xlsx'])
+    run_check = st.button("確認並開始比對")
 
     if run_check and q_file and a_file:
-        course_workdays = course_dur_weeks * 5
-        total_min_workdays = min_weeks_req * 5
+        course_workdays = st.session_state.course_dur_weeks * 5
+        total_min_workdays = st.session_state.min_weeks_req * 5
         
         try:
-            # 1. 嚴格讀取容額表
             xls_q = pd.ExcelFile(q_file)
             try: sn_q = [s for s in xls_q.sheet_names if "容額" in s or "時段" in s][0]
             except: sn_q = xls_q.sheet_names[0]
             df_q = pd.read_excel(q_file, sheet_name=sn_q, header=4)
             df_q.columns = [str(c).strip() for c in df_q.columns]
 
-            # 2. 嚴格讀取志願表
             xls_a = pd.ExcelFile(a_file)
             try: sn_a = [s for s in xls_a.sheet_names if "志願" in s][0]
             except: sn_a = xls_a.sheet_names[0]
@@ -207,11 +205,10 @@ if mode == "醫院代表":
                         s, e, d = parse_period_dates(row['實習期間'])
                         if s: apps.append({'姓名': row['姓名'], '科別': str(row[dept_col]).strip(), '開始': s, '結束': e, '天數': d})
                 
-                # --- 核心進化：動態辨識所有日期欄位 ---
                 date_cols = []
                 slot_mapping = {}
                 for c in df_q.columns:
-                    s_slot, e_slot = get_slot_dates(c)
+                    s_slot, e_slot = extract_dates_universal(c)
                     if s_slot and e_slot:
                         date_cols.append(c)
                         slot_mapping[c] = (s_slot, e_slot)
@@ -227,11 +224,9 @@ if mode == "醫院代表":
                         except: continue
                         
                         s_slot, e_slot = slot_mapping[col]
-                        
                         st_in_slot = []
                         for a in apps:
                             if a['科別'] == dept:
-                                # 區間交集核心邏輯
                                 if a['開始'] <= e_slot and a['結束'] >= s_slot:
                                     st_in_slot.append(a['姓名'])
                         
@@ -243,7 +238,6 @@ if mode == "醫院代表":
                                 "超額學生": "、".join(list(set(st_in_slot)))
                             })
 
-                # --- 規章嚴格審核 ---
                 invalid = []
                 if apps:
                     df_temp = pd.DataFrame(apps)
@@ -253,18 +247,18 @@ if mode == "醫院代表":
                         
                         for _, row in group.iterrows():
                             if row['天數'] < course_workdays:
-                                invalid.append({"姓名": name, "原因": f"[Course 天數不足] {row['科別']} 僅 {row['天數']} 個工作天 (規定需 {course_workdays} 天)"})
+                                invalid.append({"姓名": name, "原因": f"Course 天數不足：{row['科別']} 僅 {row['天數']} 個工作天 (需 {course_workdays} 天)"})
                         
                         if total_workdays < total_min_workdays:
-                            invalid.append({"姓名": name, "原因": f"[總時長不足] 僅 {total_workdays} 個工作天 (規定需 {total_min_workdays} 天)"})
+                            invalid.append({"姓名": name, "原因": f"總時長不足：僅 {total_workdays} 個工作天 (需 {total_min_workdays} 天)"})
                         
-                        if require_cont and len(group) > 1:
+                        if st.session_state.require_cont and len(group) > 1:
                             courses = group.to_dict('records')
                             for i in range(len(courses) - 1):
                                 prev_end = courses[i]['結束']
                                 next_start = courses[i+1]['開始']
                                 if (next_start - prev_end).days > 3:
-                                    invalid.append({"姓名": name, "原因": f"[未連續實習] {courses[i]['科別']} 與 {courses[i+1]['科別']} 之間出現中斷"})
+                                    invalid.append({"姓名": name, "原因": f"未連續實習：{courses[i]['科別']} 與 {courses[i+1]['科別']} 中斷"})
                                     break 
 
                 st.header("異常監控結果")
@@ -282,10 +276,9 @@ if mode == "醫院代表":
 elif mode == "系秘":
     st.title("跨院重複佔位檢查")
     
-    with st.form("secretary_form"):
-        st.markdown("### 檔案上傳")
-        multi_files = st.file_uploader("上傳各院志願清單 (可多選)", type=['xlsx'], accept_multiple_files=True)
-        run_check_sec = st.form_submit_button("確認並開始比對")
+    st.markdown("### 檔案上傳")
+    multi_files = st.file_uploader("上傳各院志願清單 (可多選)", type=['xlsx'], accept_multiple_files=True)
+    run_check_sec = st.button("確認並開始比對")
         
     if run_check_sec and multi_files:
         all_data = []
