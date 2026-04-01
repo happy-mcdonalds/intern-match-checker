@@ -77,7 +77,7 @@ if mode == "醫院代表":
     st.title("醫院內部容額與規章審核")
     
     # 規則設定 (僅在醫院代表主畫面顯示)
-    st.markdown("### 📋 規則設定")
+    st.markdown("### 規則設定")
     c_cfg1, c_cfg2, c_cfg3 = st.columns(3)
     with c_cfg1: course_duration_weeks = st.number_input("一個 Course 多久 (週)", min_value=1, value=2)
     with c_cfg2: min_weeks_req = st.number_input("最短實習週數要求 (週)", min_value=1, value=4)
@@ -157,13 +157,13 @@ if mode == "醫院代表":
             # 顯示結果
             st.header("異常監控結果")
             if collisions:
-                st.subheader("⚠️ 名額撞期名單 (超額佔位)")
+                st.subheader("名額撞期名單 (超額佔位)")
                 st.table(pd.DataFrame(collisions))
             else:
                 st.success("名額分配正常。")
 
             if invalid_students:
-                st.subheader("📝 規章不符名單 (天數不足)")
+                st.subheader("規章不符名單 (天數不足)")
                 st.table(pd.DataFrame(invalid_students).drop_duplicates())
 
         except Exception as e:
@@ -203,7 +203,7 @@ elif mode == "系秘":
                                 })
             
             if conflicts:
-                st.subheader("⚠️ 偵測到跨院衝突名單")
+                st.subheader("偵測到跨院衝突名單")
                 st.table(pd.DataFrame(conflicts).drop_duplicates())
             else:
                 st.success("交叉比對完成，無重複佔位情況。")
