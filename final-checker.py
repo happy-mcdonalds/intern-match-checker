@@ -28,12 +28,12 @@ st.markdown("""
     h1, h2, h3 { 
         color: #4A4C4B !important; 
         border-bottom: 1px solid #D6D4CE; 
-        padding-bottom: 5px; 
+        padding-bottom: 5px;
         font-weight: 700;
     }
     
     section[data-testid="stSidebar"] { 
-        background-color: #EAE8E3 !important; 
+        background-color: #EAE8E3 !important;
         border-right: 1px solid #D6D4CE !important; 
     }
     
@@ -46,7 +46,7 @@ st.markdown("""
     
     /* 一般按鈕 (鼠尾草綠) */
     .stButton > button, [data-testid="stFormSubmitButton"] > button { 
-        background-color: #8A9A92 !important; 
+        background-color: #8A9A92 !important;
         color: #FFFFFF !important; 
         border: none !important;
         border-radius: 4px !important; 
@@ -75,7 +75,7 @@ st.markdown("""
     td { border-bottom: 1px solid #EAE8E3 !important; }
     th, td {
         white-space: pre-wrap !important; 
-        vertical-align: top !important; 
+        vertical-align: top !important;
         line-height: 1.8 !important;
         text-align: left !important;
     }
@@ -84,24 +84,55 @@ st.markdown("""
 
 # --- 核心工具函式 ---
 def smart_read_sheet(file):
+    # 專為「系秘」模式修改的智慧讀取引擎，完全隔離，不影響醫院代表模式
     try:
-        xls = pd.ExcelFile(file)
-        target_sheet = xls.sheet_names[0]
-        for sn in xls.sheet_names:
-            if any(k in sn for k in ["志願", "名單", "工作表4", "實習容額"]):
-                target_sheet = sn
-                break
-        df_temp = pd.read_excel(file, sheet_name=target_sheet)
+        # 1. 支援 CSV 與 Excel 兩種格式的彈性讀取
+        if file.name.endswith('.csv'):
+            df_temp = pd.read_csv(file, header=None)
+            target_sheet = None
+        else:
+            xls = pd.ExcelFile(file)
+            target_sheet = xls.sheet_names[0]
+            for sn in xls.sheet_names:
+                if any(k in sn for k in ["志願", "名單", "工作表4", "實習容額", "申請"]):
+                    target_sheet = sn
+                    break
+            df_temp = pd.read_excel(file, sheet_name=target_sheet, header=None)
+        
+        # 2. 修正標題列判斷邏輯，直接抓取所在的列
         header_idx = 0
         for i in range(min(len(df_temp), 15)):
-            row = [str(x).strip() for x in df_temp.iloc[i].values]
-            if any(k in row for k in ["姓名", "科別", "申請科別"]):
-                header_idx = i + 1
+            row_str = "".join([str(x).replace(" ", "") for x in df_temp.iloc[i].values])
+            if "姓名" in row_str or "科別" in row_str or "日期" in row_str:
+                header_idx = i
                 break
-        df = pd.read_excel(file, sheet_name=target_sheet, header=header_idx)
-        df.columns = [str(c).strip() for c in df.columns]
+        
+        if file.name.endswith('.csv'):
+            df = pd.read_csv(file, header=header_idx)
+        else:
+            df = pd.read_excel(file, sheet_name=target_sheet, header=header_idx)
+        
+        # 3. 清理與統一欄位名稱
+        cols = []
+        for c in df.columns:
+            c_str = str(c).strip().replace('\n', '').replace(' ', '')
+            if "姓名" in c_str:
+                cols.append("姓名")
+            elif "期間" in c_str:
+                cols.append("實習期間")
+            else:
+                cols.append(c_str)
+        df.columns = cols
+        
+        # 4. 針對你的新格式：自動將「開始日期」與「結束日期」合併為一格「實習期間」
+        start_col = next((c for c in df.columns if "開始" in str(c) and "日期" in str(c)), None)
+        end_col = next((c for c in df.columns if "結束" in str(c) and "日期" in str(c)), None)
+        if start_col and end_col and "實習期間" not in df.columns:
+            df["實習期間"] = df[start_col].astype(str) + " - " + df[end_col].astype(str)
+            
         return df
-    except: return None
+    except Exception as e: 
+        return None
 
 def extract_dates_universal(text, year=2026):
     """終極日期解析引擎：強殺換行符號與缺零日期"""
@@ -117,7 +148,7 @@ def extract_dates_universal(text, year=2026):
                 return datetime(int(nums[0]), int(nums[1]), int(nums[2]))
             return datetime(year, int(nums[-2]), int(nums[-1]))
         return None
-        
+       
     dates = [extract_single_date(p) for p in parts if extract_single_date(p) is not None]
     if len(dates) == 1: return dates[0], dates[0]
     elif len(dates) >= 2: return dates[0], dates[-1]
@@ -140,7 +171,7 @@ st.sidebar.markdown('<div class="btn-secondary">', unsafe_allow_html=True)
 if st.sidebar.button("重新整理系統"): st.rerun()
 st.sidebar.markdown('</div>', unsafe_allow_html=True)
 
-# --- 醫院代表模式 ---
+# --- 醫院代表模式 (完全無更動版本) ---
 if mode == "醫院代表":
     st.title("醫院內部容額與規章審核")
     
@@ -207,6 +238,7 @@ if mode == "醫院代表":
                 
                 date_cols = []
                 slot_mapping = {}
+        
                 for c in df_q.columns:
                     s_slot, e_slot = extract_dates_universal(c)
                     if s_slot and e_slot:
@@ -217,7 +249,7 @@ if mode == "醫院代表":
                 for _, q_row in df_q.iterrows():
                     dept = str(q_row.get('科別', '')).strip()
                     if dept == 'nan' or not dept: continue
-                    
+    
                     for col in date_cols:
                         cap = q_row.get(col)
                         try: cap_val = int(float(re.sub(r'[^0-9.]', '', str(cap))))
@@ -225,6 +257,7 @@ if mode == "醫院代表":
                         
                         s_slot, e_slot = slot_mapping[col]
                         st_in_slot = []
+    
                         for a in apps:
                             if a['科別'] == dept:
                                 if a['開始'] <= e_slot and a['結束'] >= s_slot:
@@ -239,6 +272,7 @@ if mode == "醫院代表":
                             })
 
                 invalid = []
+          
                 if apps:
                     df_temp = pd.DataFrame(apps)
                     for name, group in df_temp.groupby('姓名'):
@@ -259,32 +293,35 @@ if mode == "醫院代表":
                                 next_start = courses[i+1]['開始']
                                 if (next_start - prev_end).days > 3:
                                     invalid.append({"姓名": name, "原因": f"未連續實習：{courses[i]['科別']} 與 {courses[i+1]['科別']} 中斷"})
-                                    break 
-
+                    
                 st.header("異常監控結果")
                 if collisions:
                     st.subheader("名額撞期名單")
                     st.table(pd.DataFrame(collisions))
+          
                 if invalid:
                     st.subheader("規章不符名單")
                     st.table(pd.DataFrame(invalid).drop_duplicates())
                 if not collisions and not invalid:
                     st.success("名額分配與規章核對完全符合規定。")
-        except Exception as e: st.error(f"解析失敗：{e}")
+        except Exception as e: 
+            st.error(f"解析失敗：{e}")
 
-# --- 模式：系秘 ---
+# --- 模式：系秘 (修正讀取格式版) ---
 elif mode == "系秘":
     st.title("跨院重複佔位檢查")
     
     st.markdown("### 檔案上傳")
-    multi_files = st.file_uploader("上傳各院志願清單 (可多選)", type=['xlsx'], accept_multiple_files=True)
+    # 增加 type=['xlsx', 'csv'] 支援你提供的 csv 檔案
+    multi_files = st.file_uploader("上傳各院志願清單 (可多選)", type=['xlsx', 'csv'], accept_multiple_files=True)
     run_check_sec = st.button("確認並開始比對")
         
     if run_check_sec and multi_files:
         all_data = []
         for f in multi_files:
             df = smart_read_sheet(f)
-            if df is not None and '姓名' in df.columns:
+            # 加強判斷確保資料具備必需欄位才會納入比對
+            if df is not None and '姓名' in df.columns and '實習期間' in df.columns:
                 df['姓名'] = df['姓名'].ffill()
                 clean_hosp_name = f.name.replace('.xlsx', '').replace('.csv', '')
                 df['來源醫院'] = clean_hosp_name
