@@ -83,25 +83,70 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 # --- 核心工具函式 ---
+def normalize_application_df(df):
+    if df is None:
+        return None
+
+    df = df.copy()
+    df.columns = [str(c).strip() for c in df.columns]
+
+    alias_groups = {
+        '姓名': ['姓名', '中文姓名', '學生姓名'],
+        '申請科別': ['申請科別', '科別', '實習科別'],
+        '實習日期(開始)': ['實習日期(開始)', '開始日期', '實習開始日期', '開始'],
+        '實習日期(結束)': ['實習日期(結束)', '結束日期', '實習結束日期', '結束'],
+        '實習期間': ['實習期間', '實習區間', '期間']
+    }
+
+    for target_col, candidates in alias_groups.items():
+        if target_col not in df.columns:
+            for c in candidates:
+                if c in df.columns:
+                    df[target_col] = df[c]
+                    break
+
+    if '科別' not in df.columns and '申請科別' in df.columns:
+        df['科別'] = df['申請科別']
+
+    def _fmt_date(val):
+        if pd.isna(val):
+            return ''
+        try:
+            return pd.to_datetime(val).strftime('%Y-%m-%d')
+        except:
+            return str(val).strip()
+
+    if '實習期間' not in df.columns or df['實習期間'].isna().all():
+        if '實習日期(開始)' in df.columns and '實習日期(結束)' in df.columns:
+            df['實習期間'] = df.apply(
+                lambda r: f"{_fmt_date(r['實習日期(開始)'])}~{_fmt_date(r['實習日期(結束)'])}"
+                if _fmt_date(r['實習日期(開始)']) and _fmt_date(r['實習日期(結束)']) else None,
+                axis=1
+            )
+
+    return df
+
+
 def smart_read_sheet(file):
     try:
         xls = pd.ExcelFile(file)
         target_sheet = xls.sheet_names[0]
         for sn in xls.sheet_names:
-            if any(k in sn for k in ["志願", "名單", "工作表4", "實習容額"]):
+            if any(k in sn for k in ["志願", "名單", "工作表4", "實習容額", "實習"]):
                 target_sheet = sn
                 break
         df_temp = pd.read_excel(file, sheet_name=target_sheet)
         header_idx = 0
         for i in range(min(len(df_temp), 15)):
             row = [str(x).strip() for x in df_temp.iloc[i].values]
-            if any(k in row for k in ["姓名", "科別", "申請科別"]):
+            if any(k in row for k in ["姓名", "中文姓名", "科別", "申請科別", "實習科別", "實習日期(開始)"]):
                 header_idx = i + 1
                 break
         df = pd.read_excel(file, sheet_name=target_sheet, header=header_idx)
         df.columns = [str(c).strip() for c in df.columns]
-        return df
-    except: return None
+        return normalize_application_df(df)
+    except:
+        return None
 
 def extract_dates_universal(text, year=2026):
     """終極日期解析引擎：強殺換行符號與缺零日期"""
@@ -194,6 +239,7 @@ if mode == "醫院代表":
                     break
             df_a = pd.read_excel(a_file, sheet_name=sn_a, header=header_idx)
             df_a.columns = [str(c).strip() for c in df_a.columns]
+            df_a = normalize_application_df(df_a)
 
             if df_q is not None and df_a is not None:
                 if '姓名' in df_a.columns: df_a['姓名'] = df_a['姓名'].ffill()
@@ -261,12 +307,12 @@ if mode == "醫院代表":
                                     invalid.append({"姓名": name, "原因": f"未連續實習：{courses[i]['科別']} 與 {courses[i+1]['科別']} 中斷"})
                                     break 
 
-                st.header("異常名單")
+                st.header("異常監控結果")
                 if collisions:
-                    st.subheader("撞期名單")
+                    st.subheader("名額撞期名單")
                     st.table(pd.DataFrame(collisions))
                 if invalid:
-                    st.subheader("不符規章名單")
+                    st.subheader("規章不符名單")
                     st.table(pd.DataFrame(invalid).drop_duplicates())
                 if not collisions and not invalid:
                     st.success("名額分配與規章核對完全符合規定。")
