@@ -96,7 +96,4 @@ if all_data:
 
         with st.expander("🔍 查看合併後的總表"):
             st.dataframe(full_df)
-streamlit
-pandas
-openpyxl  
 
