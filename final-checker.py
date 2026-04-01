@@ -4,23 +4,20 @@ from datetime import datetime, timedelta
 import re
 
 # --- 初始化系統記憶 ---
-if "course_dur_weeks" not in st.session_state:
-    st.session_state.course_dur_weeks = 2
-if "min_weeks_req" not in st.session_state:
-    st.session_state.min_weeks_req = 4
-if "require_cont" not in st.session_state:
-    st.session_state.require_cont = True
+if "course_dur_weeks" not in st.session_state: st.session_state.course_dur_weeks = 2
+if "min_weeks_req" not in st.session_state: st.session_state.min_weeks_req = 4
+if "require_cont" not in st.session_state: st.session_state.require_cont = True
 
 # 頁面基本設定
 st.set_page_config(page_title="醫學系實習選配管理系統", layout="wide")
 
-# --- 莫蘭迪色系 + 強制純宋體 + 霸道換行 CSS ---
+# --- 莫蘭迪色系 + 強制純宋體 CSS ---
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;700&display=swap');
     
     html, body, [class*="css"], [data-testid="stAppViewContainer"], .stApp {
-        font-family: 'Noto Serif TC', 'Songti TC', 'PMingLiU', 'MingLiU', 'SimSun', serif !important;
+        font-family: 'Noto Serif TC', 'Songti TC', 'serif' !important;
         background-color: #F5F4F1 !important; 
         color: #5C5E5D !important; 
     }
@@ -44,7 +41,6 @@ st.markdown("""
         padding: 20px;
     }
     
-    /* 按鈕樣式 (鼠尾草綠) */
     .stButton > button, [data-testid="stFormSubmitButton"] > button { 
         background-color: #8A9A92 !important; 
         color: #FFFFFF !important; 
@@ -62,82 +58,70 @@ st.markdown("""
         color: #FFFFFF !important;
     }
     
-    /* 強制表格換行核心 CSS */
-    [data-testid="stTable"] td {
-        white-space: pre-wrap !important;
-        word-break: break-word !important;
-        vertical-align: top !important;
-        line-height: 1.8 !important;
-    }
-    [data-testid="stTable"] th {
-        background-color: #E3E1DB !important;
-        color: #4A4C4B !important;
-    }
+    /* 表格底層強化 */
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+    th { background-color: #E3E1DB !important; color: #4A4C4B !important; padding: 12px; text-align: left; border-bottom: 2px solid #C0BFB8; }
+    td { padding: 12px; border-bottom: 1px solid #EAE8E3; vertical-align: top; line-height: 1.6; white-space: pre-wrap !important; }
     </style>
     """, unsafe_allow_html=True)
 
 # --- 核心工具函式 ---
 
 def smart_read_sheet(file):
-    """改良讀取：自動校正欄位名稱，避免找不到姓名"""
+    """強力偵測標題：只要欄位名稱包含關鍵字就強制歸位"""
     try:
         xls = pd.ExcelFile(file)
-        # 尋找目標工作表
         target_sheet = xls.sheet_names[0]
         for sn in xls.sheet_names:
             if any(k in sn for k in ["志願", "名單", "工作表4", "實習容額"]):
                 target_sheet = sn
                 break
         
-        # 預讀來抓表頭位置
-        df_temp = pd.read_excel(file, sheet_name=target_sheet)
+        # 讀取時不設 header，手動掃描
+        df_raw = pd.read_excel(file, sheet_name=target_sheet, header=None)
         header_idx = 0
-        for i in range(min(len(df_temp), 20)):
-            row = [str(x).replace(' ', '').replace('\n', '') for x in df_temp.iloc[i].values]
-            if any(k in val for k in ["姓名", "科別", "申請科別"] for val in row):
-                header_idx = i + 1
+        for i in range(min(len(df_raw), 25)):
+            row_vals = [str(x).strip() for x in df_raw.iloc[i].values]
+            if any("姓名" in x or "科別" in x for x in row_vals):
+                header_idx = i
                 break
         
-        # 正式讀取
         df = pd.read_excel(file, sheet_name=target_sheet, header=header_idx)
         
-        # 清洗欄位名稱：移除空格與換行，並將包含「姓名」的欄位正名
-        new_cols = []
+        # 欄位正名手術：解決空白、換行、各種名稱混亂
+        clean_cols = {}
         for c in df.columns:
-            clean_c = str(c).replace(' ', '').replace('\n', '')
-            if "姓名" in clean_c:
-                new_cols.append("姓名")
-            elif "申請科別" in clean_c or "實習科別" in clean_c:
-                new_cols.append("科別")
-            elif "實習期間" in clean_c:
-                new_cols.append("實習期間")
-            else:
-                new_cols.append(clean_c)
-        df.columns = new_cols
+            orig_c = str(c).strip()
+            # 移除所有空白後檢查
+            c_simple = re.sub(r'\s+', '', orig_c)
+            if "姓名" in c_simple: clean_cols[c] = "姓名"
+            elif "科別" in c_simple: clean_cols[c] = "科別"
+            elif "實習期間" in c_simple: clean_cols[c] = "實習期間"
+            else: clean_cols[c] = c_simple
+            
+        df = df.rename(columns=clean_cols)
+        # 確保所有欄位名稱都是乾淨的字串
+        df.columns = [str(c) for c in df.columns]
         return df
-    except Exception as e:
-        st.error(f"檔案讀取失敗: {e}")
+    except:
         return None
 
 def extract_dates_universal(text, year=2026):
-    """終極日期解析引擎：強殺換行符號"""
     if isinstance(text, datetime): return text, text
-    # 將所有換行、空格、雜質換成統一分隔符
-    text = str(text).replace('\n', '-').replace('\r', '-').replace(' ', '').strip()
+    # 將所有可能的換行、多餘空格換成標準橫線
+    text = re.sub(r'[\n\r\s]+', '-', str(text)).strip()
     parts = re.split(r'[-~～到至_]+', text)
     
-    def extract_single_date(part):
+    def parse_part(part):
         nums = re.findall(r'\d+', part)
         if len(nums) >= 2:
-            if len(nums[0]) == 4 and len(nums) >= 3:
-                return datetime(int(nums[0]), int(nums[1]), int(nums[2]))
-            return datetime(year, int(nums[-2]), int(nums[-1]))
+            y = int(nums[0]) if len(nums[0]) == 4 else year
+            m, d = (int(nums[1]), int(nums[2])) if len(nums[0]) == 4 else (int(nums[-2]), int(nums[-1]))
+            return datetime(y, m, d)
         return None
-        
-    dates = [extract_single_date(p) for p in parts if extract_single_date(p) is not None]
-    if len(dates) == 1: return dates[0], dates[0]
-    elif len(dates) >= 2: return dates[0], dates[-1]
-    return None, None
+    
+    dates = [parse_part(p) for p in parts if parse_part(p)]
+    return (dates[0], dates[-1]) if len(dates) >= 2 else (dates[0], dates[0]) if dates else (None, None)
 
 def parse_period_dates(p_str):
     try:
@@ -189,55 +173,40 @@ if mode == "醫院代表":
         total_min_workdays = st.session_state.min_weeks_req * 5
         
         try:
-            # 讀取容額表
             df_q = smart_read_sheet(q_file)
-            # 讀取志願表
             df_a = smart_read_sheet(a_file)
 
             if df_q is not None and df_a is not None:
-                # 確保姓名欄位存在後填補合併儲存格
-                if '姓名' in df_a.columns: 
-                    df_a['姓名'] = df_a['姓名'].ffill()
-                else:
-                    st.error("志願表中找不到「姓名」欄位，請確認 Excel 第一列是否正確。")
+                # 最終檢查點：如果還是沒抓到姓名，直接報錯
+                if '姓名' not in df_a.columns:
+                    st.error("志願表中找不到「姓名」欄位。請檢查 Excel 表頭是否包含「姓名」二字。")
                     st.stop()
                 
+                df_a['姓名'] = df_a['姓名'].ffill()
                 apps = []
-                # 使用正名後的欄位
                 for _, row in df_a.iterrows():
-                    if pd.notna(row.get('科別')) and pd.notna(row.get('實習期間')):
-                        s, e, d = parse_period_dates(row['實習期間'])
-                        if s: apps.append({'姓名': row['姓名'], '科別': str(row['科別']).strip(), '開始': s, '結束': e, '天數': d})
+                    # 改用正名後的欄位
+                    d_val = row.get('科別')
+                    t_val = row.get('實習期間')
+                    if pd.notna(d_val) and pd.notna(t_val):
+                        s, e, d = parse_period_dates(t_val)
+                        if s: apps.append({'姓名': row['姓名'], '科別': str(d_val).strip(), '開始': s, '結束': e, '天數': d})
                 
-                # 比對容額
-                date_cols = []
-                slot_mapping = {}
-                for c in df_q.columns:
-                    s_slot, e_slot = extract_dates_universal(c)
-                    if s_slot and e_slot:
-                        date_cols.append(c)
-                        slot_mapping[c] = (s_slot, e_slot)
-
+                # 容額比對
+                date_cols = [c for c in df_q.columns if extract_dates_universal(c)[0]]
+                q_dept_col = '科別' if '科別' in df_q.columns else df_q.columns[0]
                 collisions = []
                 for _, q_row in df_q.iterrows():
-                    dept = str(q_row.get('科別', '')).strip()
+                    dept = str(q_row.get(q_dept_col, '')).strip()
                     if dept == 'nan' or not dept: continue
-                    
                     for col in date_cols:
-                        cap = q_row.get(col)
-                        try: cap_val = int(float(re.sub(r'[^0-9.]', '', str(cap))))
+                        try:
+                            cap_val = int(float(re.sub(r'[^0-9.]', '', str(q_row.get(col)))))
                         except: continue
-                        
-                        s_slot, e_slot = slot_mapping[col]
+                        s_slot, e_slot = extract_dates_universal(col)
                         st_in_slot = [a['姓名'] for a in apps if a['科別'] == dept and a['開始'] <= e_slot and a['結束'] >= s_slot]
-                        
                         if len(st_in_slot) > cap_val:
-                            collisions.append({
-                                "科別": dept, 
-                                "時間": str(col).replace('\n', ' '), 
-                                "容額": cap_val, 
-                                "超額學生": "、".join(list(set(st_in_slot)))
-                            })
+                            collisions.append({"科別": dept, "時間": str(col).replace('\n', ' '), "容額": cap_val, "超額學生": "、".join(list(set(st_in_slot)))})
 
                 # 規章檢查
                 invalid = []
@@ -248,17 +217,17 @@ if mode == "醫院代表":
                         total_workdays = group['天數'].sum()
                         for _, row in group.iterrows():
                             if row['天數'] < course_workdays:
-                                invalid.append({"姓名": name, "原因": f"Course 天數不足：{row['科別']} 僅 {row['天數']} 天 (需 {course_workdays} 天)"})
+                                invalid.append({"姓名": name, "原因": f"Course 天數不足：{row['科別']} ({row['天數']} 天)"})
                         if total_workdays < total_min_workdays:
-                            invalid.append({"姓名": name, "原因": f"總時長不足：僅 {total_workdays} 天 (需 {total_min_workdays} 天)"})
+                            invalid.append({"姓名": name, "原因": f"總時長不足 ({total_workdays} 天)"})
                         if st.session_state.require_cont and len(group) > 1:
                             courses = group.to_dict('records')
                             for i in range(len(courses) - 1):
                                 if (courses[i+1]['開始'] - courses[i]['結束']).days > 3:
-                                    invalid.append({"姓名": name, "原因": f"未連續實習：{courses[i]['科別']} 與 {courses[i+1]['科別']} 中斷"})
+                                    invalid.append({"姓名": name, "原因": "實習中斷(未連續)"})
                                     break 
 
-                st.header("異常監控結果")
+                st.header("分析結果")
                 if collisions:
                     st.subheader("名額撞期名單")
                     st.table(pd.DataFrame(collisions))
@@ -266,8 +235,8 @@ if mode == "醫院代表":
                     st.subheader("規章不符名單")
                     st.table(pd.DataFrame(invalid).drop_duplicates())
                 if not collisions and not invalid:
-                    st.success("名額分配與規章核對完全符合規定。")
-        except Exception as e: st.error(f"分析過程發生錯誤：{e}")
+                    st.success("核對完成，查無異常。")
+        except Exception as e: st.error(f"分析過程錯誤：{e}")
 
 # --- 模式：系秘 ---
 elif mode == "系秘":
@@ -282,7 +251,6 @@ elif mode == "系秘":
             if df is not None and '姓名' in df.columns:
                 df['姓名'] = df['姓名'].ffill()
                 df['來源醫院'] = f.name.replace('.xlsx', '')
-                # 確保時間欄位存在
                 time_col = '實習期間' if '實習期間' in df.columns else None
                 if time_col:
                     all_data.append(df[df[time_col].notna()])
@@ -301,11 +269,17 @@ elif mode == "系秘":
                             if s1 and s2 and (s1 <= e2 and s2 <= e1):
                                 hit.update([i, j])
                     if hit:
-                        details = "\n".join([f"• {s_apps[idx]['來源醫院']} ({str(s_apps[idx]['實習期間']).replace('\n','')})" for idx in sorted(list(hit))])
+                        # 換行符號 \n 是條列式的核心
+                        details = "<br>".join([f"• {s_apps[idx]['來源醫院']} ({str(s_apps[idx]['實習期間']).replace('\n','')})" for idx in sorted(list(hit))])
                         conflicts.append({"姓名": name, "衝突詳情": details})
             
             if conflicts:
                 st.subheader("偵測到跨院衝突名單")
-                st.table(pd.DataFrame(conflicts).set_index('姓名'))
+                # 使用 HTML 模式顯示表格，徹底解決換行失效
+                html_table = "<table style='width:100%'><tr><th>姓名</th><th>衝突詳情</th></tr>"
+                for c in conflicts:
+                    html_table += f"<tr><td>{c['姓名']}</td><td>{c['衝突詳情']}</td></tr>"
+                html_table += "</table>"
+                st.markdown(html_table, unsafe_allow_html=True)
             else: 
                 st.success("無重複佔位情況。")
