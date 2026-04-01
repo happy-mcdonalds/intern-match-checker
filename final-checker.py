@@ -86,7 +86,7 @@ st.markdown("""
 def smart_read_sheet(file):
     # 專為「系秘」模式修改的智慧讀取引擎，完全隔離，不影響醫院代表模式
     try:
-        # 1. 支援 CSV 與 Excel 兩種格式的彈性讀取
+        # 1. 支援 CSV 與 Excel
         if file.name.endswith('.csv'):
             df_temp = pd.read_csv(file, header=None)
             target_sheet = None
@@ -99,7 +99,7 @@ def smart_read_sheet(file):
                     break
             df_temp = pd.read_excel(file, sheet_name=target_sheet, header=None)
         
-        # 2. 修正標題列判斷邏輯，直接抓取所在的列
+        # 2. 修正標題列判斷邏輯
         header_idx = 0
         for i in range(min(len(df_temp), 15)):
             row_str = "".join([str(x).replace(" ", "") for x in df_temp.iloc[i].values])
@@ -125,10 +125,25 @@ def smart_read_sheet(file):
         df.columns = cols
         
         # 4. 針對你的新格式：自動將「開始日期」與「結束日期」合併為一格「實習期間」
+        # 【關鍵修復】：將 YYYY-MM-DD 強制轉為 YYYY/MM/DD，避免底層日期解析引擎踩雷
         start_col = next((c for c in df.columns if "開始" in str(c) and "日期" in str(c)), None)
         end_col = next((c for c in df.columns if "結束" in str(c) and "日期" in str(c)), None)
+        
         if start_col and end_col and "實習期間" not in df.columns:
-            df["實習期間"] = df[start_col].astype(str) + " - " + df[end_col].astype(str)
+            def safe_format(val):
+                if pd.isna(val) or str(val).strip() == '' or str(val).lower() == 'nan':
+                    return ""
+                try:
+                    return pd.to_datetime(val).strftime('%Y/%m/%d')
+                except:
+                    # 如果不能轉為 datetime，至少確保把破折號轉成斜線
+                    return str(val).replace('-', '/')
+                    
+            df["實習期間"] = df.apply(
+                lambda row: f"{safe_format(row[start_col])} ~ {safe_format(row[end_col])}" 
+                if safe_format(row[start_col]) and safe_format(row[end_col]) else None, 
+                axis=1
+            )
             
         return df
     except Exception as e: 
@@ -137,7 +152,6 @@ def smart_read_sheet(file):
 def extract_dates_universal(text, year=2026):
     """終極日期解析引擎：強殺換行符號與缺零日期"""
     if isinstance(text, datetime): return text, text
-    # 關鍵：強制把 Excel 內的換行符號 \n 轉換為破折號
     text = str(text).replace('\n', '-').replace('\r', '-').replace(' ', '').strip()
     parts = re.split(r'[-~～到至_]+', text)
     
@@ -307,12 +321,11 @@ if mode == "醫院代表":
         except Exception as e: 
             st.error(f"解析失敗：{e}")
 
-# --- 模式：系秘 (修正讀取格式版) ---
+# --- 模式：系秘 ---
 elif mode == "系秘":
     st.title("跨院重複佔位檢查")
     
     st.markdown("### 檔案上傳")
-    # 增加 type=['xlsx', 'csv'] 支援你提供的 csv 檔案
     multi_files = st.file_uploader("上傳各院志願清單 (可多選)", type=['xlsx', 'csv'], accept_multiple_files=True)
     run_check_sec = st.button("確認並開始比對")
         
@@ -320,7 +333,6 @@ elif mode == "系秘":
         all_data = []
         for f in multi_files:
             df = smart_read_sheet(f)
-            # 加強判斷確保資料具備必需欄位才會納入比對
             if df is not None and '姓名' in df.columns and '實習期間' in df.columns:
                 df['姓名'] = df['姓名'].ffill()
                 clean_hosp_name = f.name.replace('.xlsx', '').replace('.csv', '')
@@ -340,6 +352,7 @@ elif mode == "系秘":
                         for j in range(i + 1, len(s_apps)):
                             d1_s, d1_e, _ = parse_period_dates(s_apps[i]['實習期間'])
                             d2_s, d2_e, _ = parse_period_dates(s_apps[j]['實習期間'])
+                            
                             if d1_s and d2_s and (d1_s <= d2_e and d2_s <= d1_e):
                                 conflict_set.add(i)
                                 conflict_set.add(j)
