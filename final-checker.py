@@ -6,7 +6,7 @@ import re
 # 頁面基本設定
 st.set_page_config(page_title="醫學系實習選配管理系統", layout="wide")
 
-# --- 高級感 CSS (宋體 + 黑白灰 + 支援條列式換行) ---
+# --- 高級感 CSS (宋體 + 黑白灰 + 完美條列式) ---
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;700&display=swap');
@@ -24,13 +24,13 @@ st.markdown("""
     section[data-testid="stSidebar"] { background-color: #FFFFFF; border-right: 1px solid #DDDDDD; }
     .stButton>button { color: #FFFFFF !important; background-color: #000000 !important; border-radius: 0px; width: 100%; }
     
-    /* 表格設定：保留換行符號 (\n)，並讓文字向上對齊，適合條列式閱讀 */
+    /* 表格設定：完美支援 \n 換行，並置左對齊 */
     .stTable { font-size: 14px; }
     th, td {
         white-space: pre-wrap !important; 
-        word-break: keep-all !important;
-        vertical-align: top !important; 
+        vertical-align: middle !important; 
         line-height: 1.8 !important;
+        text-align: left !important;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -57,9 +57,17 @@ def smart_read_sheet(file):
     except: return None
 
 def parse_date_simple(s, year=2026):
+    """裝甲級日期解析：支援 2026/5/4、5/4、05.04 各種變體"""
     try:
-        parts = re.findall(r'\d+', str(s))
-        if len(parts) >= 2: return datetime(year, int(parts[0]), int(parts[1]))
+        s = str(s).replace('\n', '').strip()
+        parts = re.findall(r'\d+', s)
+        if len(parts) >= 2:
+            # 如果第一個數字是4碼(例如2026)，就抓年月日時
+            if len(parts[0]) == 4 and len(parts) >= 3:
+                return datetime(int(parts[0]), int(parts[1]), int(parts[2]))
+            else:
+                # 否則只抓最後兩個數字作為月、日
+                return datetime(year, int(parts[-2]), int(parts[-1]))
     except: pass
     return None
 
@@ -70,7 +78,6 @@ def parse_period_dates(p_str):
         if len(dates) >= 2:
             s = datetime.strptime(dates[0], "%Y.%m.%d")
             e = datetime.strptime(dates[1], "%Y.%m.%d")
-            # 利用 pandas 計算實際工作天 (Business days)
             workdays = len(pd.bdate_range(s, e))
             return s, e, workdays
     except: pass
@@ -92,7 +99,6 @@ if mode == "醫院代表":
     with c_cfg3: require_cont = st.checkbox("要求必須連續實習", value=True)
     st.divider()
 
-    # 換算為嚴格工作天數 (1週 = 5個工作天)
     course_workdays = course_dur_weeks * 5
     total_min_workdays = min_weeks_req * 5
 
@@ -169,29 +175,24 @@ if mode == "醫院代表":
                 if apps:
                     df_temp = pd.DataFrame(apps)
                     for name, group in df_temp.groupby('姓名'):
-                        # 依照開始時間排序，確保連續性檢查正確
                         group = group.sort_values('開始')
                         total_workdays = group['天數'].sum()
                         
-                        # 1. 檢查單一 Course 天數
                         for _, row in group.iterrows():
                             if row['天數'] < course_workdays:
                                 invalid.append({"姓名": name, "原因": f"【Course 天數不足】 {row['科別']} 僅 {row['天數']} 個工作天 (規定需 {course_workdays} 天)"})
                         
-                        # 2. 檢查總實習天數
                         if total_workdays < total_min_workdays:
                             invalid.append({"姓名": name, "原因": f"【總時長不足】 僅 {total_workdays} 個工作天 (規定需 {total_min_workdays} 天)"})
                         
-                        # 3. 檢查是否連續實習
                         if require_cont and len(group) > 1:
                             courses = group.to_dict('records')
                             for i in range(len(courses) - 1):
                                 prev_end = courses[i]['結束']
                                 next_start = courses[i+1]['開始']
-                                # 若下個開始時間晚於前一個結束時間超過 3 天 (代表中間非合理週末換科)
                                 if (next_start - prev_end).days > 3:
                                     invalid.append({"姓名": name, "原因": f"【未連續實習】 {courses[i]['科別']} 與 {courses[i+1]['科別']} 之間出現中斷"})
-                                    break # 報一次錯誤即可
+                                    break 
 
                 # --- 顯示結果 ---
                 st.header("異常監控結果")
@@ -243,10 +244,12 @@ elif mode == "系秘":
                         for idx in sorted(list(conflict_set)):
                             hosp = s_apps[idx]['來源醫院']
                             period = str(s_apps[idx]['實習期間']).replace('\n', '')
-                            details.append(f"- {hosp} ({period})")
+                            # 【完美條列式】使用 • 符號
+                            details.append(f"• {hosp} ({period})")
                         
                         conflicts.append({
                             "姓名": name,
+                            # 用換行符號取代所有直線，搭配 CSS 就能完美向下排列
                             "衝突詳情": "\n".join(details)
                         })
                         
