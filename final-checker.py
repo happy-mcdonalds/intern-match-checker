@@ -1,62 +1,40 @@
-# --- 模式：系秘 ---
-elif mode == "系秘":
-    st.title("跨院重複佔位檢查")
-    st.markdown("請上傳各院檔案，系統將自動比對。")
-    
-    multi_files = st.file_uploader("上傳各院志願清單 (可多選)", type=['xlsx'], accept_multiple_files=True)
-    
-    if multi_files:
-        all_data = []
-        for f in multi_files:
-            df = smart_read_sheet(f)
-            if df is not None and '姓名' in df.columns:
-                df['姓名'] = df['姓名'].ffill()
-                # 自動清除副檔名，讓名字更乾淨 (例如 北榮.xlsx -> 北榮)
-                clean_hosp_name = f.name.replace('.xlsx', '').replace('.csv', '')
-                df['來源醫院'] = clean_hosp_name
-                all_data.append(df[df['實習期間'].notna()])
-                
-        if all_data:
-            full_df = pd.concat(all_data, ignore_index=True)
-            conflicts = []
-            
-            # 以姓名為單位進行掃描
-            for name in full_df['姓名'].unique():
-                s_apps = full_df[full_df['姓名'] == name].to_dict('records')
-                if len(s_apps) > 1:
-                    conflict_set = set() # 收集這個人所有產生衝突的紀錄
-                    
-                    for i in range(len(s_apps)):
-                        for j in range(i + 1, len(s_apps)):
-                            d1_s, d1_e, _ = parse_period_dates(s_apps[i]['實習期間'])
-                            d2_s, d2_e, _ = parse_period_dates(s_apps[j]['實習期間'])
-                            # 如果時間重疊，就把這兩筆紀錄都加入衝突集合
-                            if d1_s and d2_s and (d1_s <= d2_e and d2_s <= d1_e):
-                                conflict_set.add(i)
-                                conflict_set.add(j)
-                    
-                    # 如果這個人有衝突，就把它壓縮成乾淨的一行
-                    if conflict_set:
-                        details = []
-                        # 依照原本讀取的順序排列
-                        for idx in sorted(list(conflict_set)):
-                            hosp = s_apps[idx]['來源醫院']
-                            period = str(s_apps[idx]['實習期間']).replace('\n', '')
-                            details.append(f"{hosp} ({period})")
-                        
-                        conflicts.append({
-                            "姓名": name,
-                            "衝突詳情": " ｜ ".join(details)
-                        })
-                        
-            if conflicts:
-                st.subheader("⚠️ 偵測到跨院衝突名單")
-                # 建立 DataFrame
-                df_conflicts = pd.DataFrame(conflicts)
-                # 關鍵：將「姓名」設為 Index，這樣最左邊醜醜的 0, 1 就會消失！
-                st.table(df_conflicts.set_index('姓名'))
-            else: 
-                st.success("無重複佔位。")            row = [str(x).strip() for x in df_temp.iloc[i].values]
+import streamlit as st
+import pandas as pd
+from datetime import datetime, timedelta
+import re
+
+# 頁面基本設定
+st.set_page_config(page_title="醫學系實習選配管理系統", layout="wide")
+
+# --- 高級感 CSS (宋體 + 黑白灰) ---
+st.markdown("""
+    <style>
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;700&display=swap');
+    html, body, [class*="css"] {
+        font-family: 'Noto Serif TC', 'Songti TC', serif !important;
+        color: #000000;
+    }
+    h1, h2, h3 { color: #000000 !important; border-bottom: 1px solid #000000; padding-bottom: 5px; }
+    .stApp { background-color: #FFFFFF; }
+    section[data-testid="stSidebar"] { background-color: #FFFFFF; border-right: 1px solid #DDDDDD; }
+    .stButton>button { color: #FFFFFF !important; background-color: #000000 !important; border-radius: 0px; width: 100%; }
+    .stTable { font-size: 14px; }
+    </style>
+    """, unsafe_allow_html=True)
+
+# --- 核心工具函式 ---
+def smart_read_sheet(file):
+    try:
+        xls = pd.ExcelFile(file)
+        target_sheet = xls.sheet_names[0]
+        for sn in xls.sheet_names:
+            if any(k in sn for k in ["志願", "名單", "工作表4", "實習容額"]):
+                target_sheet = sn
+                break
+        df_temp = pd.read_excel(file, sheet_name=target_sheet)
+        header_idx = 0
+        for i in range(min(len(df_temp), 15)):
+            row = [str(x).strip() for x in df_temp.iloc[i].values]
             if any(k in row for k in ["姓名", "科別", "申請科別"]):
                 header_idx = i + 1
                 break
@@ -163,7 +141,7 @@ if mode == "醫院代表":
 
                 st.header("異常監控結果")
                 if collisions:
-                    st.subheader("名額撞期名單 (超額佔位)")
+                    st.subheader("⚠️ 名額撞期名單 (超額佔位)")
                     st.table(pd.DataFrame(collisions))
                 if invalid:
                     pass
@@ -171,17 +149,20 @@ if mode == "醫院代表":
                     st.success("名額分配正常。")
         except Exception as e: st.error(f"解析失敗：{e}")
 
-# --- 系秘模式 ---
+# --- 模式：系秘 ---
 elif mode == "系秘":
     st.title("跨院重複佔位檢查")
+    st.markdown("請上傳各院檔案，系統將自動比對。")
+    
     multi_files = st.file_uploader("上傳各院志願清單 (可多選)", type=['xlsx'], accept_multiple_files=True)
+    
     if multi_files:
         all_data = []
         for f in multi_files:
             df = smart_read_sheet(f)
             if df is not None and '姓名' in df.columns:
                 df['姓名'] = df['姓名'].ffill()
-                # 讓畫面更乾淨：將「北榮.xlsx」清理為「北榮」
+                # 自動清除副檔名，讓名字更乾淨 (例如 北榮.xlsx -> 北榮)
                 clean_hosp_name = f.name.replace('.xlsx', '').replace('.csv', '')
                 df['來源醫院'] = clean_hosp_name
                 all_data.append(df[df['實習期間'].notna()])
@@ -194,7 +175,7 @@ elif mode == "系秘":
             for name in full_df['姓名'].unique():
                 s_apps = full_df[full_df['姓名'] == name].to_dict('records')
                 if len(s_apps) > 1:
-                    conflict_set = set() # 用來收集這個人所有產生衝突的申請紀錄 index
+                    conflict_set = set() # 收集這個人所有產生衝突的紀錄
                     
                     for i in range(len(s_apps)):
                         for j in range(i + 1, len(s_apps)):
@@ -205,7 +186,7 @@ elif mode == "系秘":
                                 conflict_set.add(i)
                                 conflict_set.add(j)
                     
-                    # 如果這個人有衝突，就把它壓縮成一行字串
+                    # 如果這個人有衝突，就把它壓縮成乾淨的一行
                     if conflict_set:
                         details = []
                         # 依照原本讀取的順序排列
@@ -214,14 +195,15 @@ elif mode == "系秘":
                             period = str(s_apps[idx]['實習期間']).replace('\n', '')
                             details.append(f"{hosp} ({period})")
                         
-                        # 呈現格式： 姓名 | 北榮(5/4-5/15) ｜ 國泰(5/11-5/22)
                         conflicts.append({
                             "姓名": name,
                             "衝突詳情": " ｜ ".join(details)
                         })
                         
             if conflicts:
-                st.subheader("偵測到跨院衝突名單")
-                st.table(pd.DataFrame(conflicts))
+                st.subheader("⚠️ 偵測到跨院衝突名單")
+                # 建立 DataFrame 並將姓名設為 Index，隱藏最左邊的預設數字
+                df_conflicts = pd.DataFrame(conflicts)
+                st.table(df_conflicts.set_index('姓名'))
             else: 
                 st.success("無重複佔位。")
