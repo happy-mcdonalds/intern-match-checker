@@ -157,7 +157,7 @@ if mode == "醫院代表":
             # 顯示結果
             st.header("異常監控結果")
             if collisions:
-                st.subheader("名額撞期名單 (超額佔位)")
+                st.subheader("名額撞期名單")
                 st.table(pd.DataFrame(collisions))
             else:
                 st.success("名額分配正常。")
