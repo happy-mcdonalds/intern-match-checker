@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timedelta
 import re
 
 # 頁面基本設定
@@ -28,33 +28,40 @@ def smart_read_sheet(file):
     try:
         xls = pd.ExcelFile(file)
         target_sheet = xls.sheet_names[0]
-        # 優先尋找關鍵字分頁
         for sn in xls.sheet_names:
-            if any(k in sn for k in ["志願", "名單", "工作表4", "Sheet1"]):
+            if any(k in sn for k in ["志願", "名單", "時段", "工作表4"]):
                 target_sheet = sn
                 break
-        
         df_temp = pd.read_excel(file, sheet_name=target_sheet)
         header_idx = 0
-        for i in range(min(len(df_temp), 10)):
+        for i in range(min(len(df_temp), 15)):
             row = [str(x) for x in df_temp.iloc[i].values]
-            if any(k in row for k in ["姓名", "科別", "申請科別"]):
+            if any(k in row for k in ["姓名", "科別", "申請科別", "實習時間"]):
                 header_idx = i + 1
                 break
         return pd.read_excel(file, sheet_name=target_sheet, header=header_idx)
-    except:
-        return None
+    except: return None
 
-def parse_dates(period_str):
-    """解析日期區間 2026.05.04-2026.05.15"""
+def parse_date_simple(s, year=2026):
+    """將 5/4 或 2026.05.04 解析為 datetime"""
+    try:
+        if "." in str(s):
+            return datetime.strptime(re.search(r'\d{4}\.\d{2}\.\d{2}', str(s)).group(), "%Y.%m.%d")
+        parts = re.findall(r'\d+', str(s))
+        if len(parts) >= 2:
+            return datetime(year, int(parts[0]), int(parts[1]))
+    except: pass
+    return None
+
+def parse_period(period_str):
+    """解析 2026.05.04-2026.05.15"""
     try:
         dates = re.findall(r'\d{4}\.\d{2}\.\d{2}', str(period_str).replace('\n',''))
         if len(dates) >= 2:
             s = datetime.strptime(dates[0], "%Y.%m.%d")
             e = datetime.strptime(dates[1], "%Y.%m.%d")
             return s, e, (e - s).days + 1
-    except:
-        pass
+    except: pass
     return None, None, 0
 
 # --- 側邊欄 ---
@@ -65,21 +72,17 @@ st.sidebar.divider()
 # --- 模式：醫院代表 ---
 if mode == "醫院代表":
     st.title("醫院內部容額與規章審核")
-    
-    # 僅在醫院代表模式顯示的設定
     col_cfg1, col_cfg2 = st.columns(2)
-    with col_cfg1:
-        course_duration = st.number_input("一個 Course 多久 (週)", min_value=1, value=2)
-    with col_cfg2:
-        min_weeks_req = st.number_input("最短實習週數要求 (週)", min_value=1, value=4)
+    with col_cfg1: course_dur = st.number_input("一個 Course 多久 (週)", min_value=1, value=2)
+    with col_cfg2: min_weeks = st.number_input("最短實習週數要求 (週)", min_value=1, value=4)
     require_cont = st.checkbox("要求必須連續實習", value=True)
     
-    course_days = course_duration * 5
-    min_total_days = min_weeks_req * 5
+    course_days = course_dur * 5
+    min_total_days = min_weeks * 5
 
     c1, c2 = st.columns(2)
-    with c1: q_file = st.file_uploader("上傳醫院容額表", type=['xlsx'], key="h_q")
-    with c2: a_file = st.file_uploader("上傳學生志願表", type=['xlsx'], key="h_a")
+    with c1: q_file = st.file_uploader("1. 上傳醫院容額表", type=['xlsx'])
+    with c2: a_file = st.file_uploader("2. 上傳學生志願表", type=['xlsx'])
 
     if q_file and a_file:
         df_q = smart_read_sheet(q_file)
@@ -88,42 +91,70 @@ if mode == "醫院代表":
         if df_q is not None and df_a is not None:
             df_a.columns = [str(c).strip() for c in df_a.columns]
             df_a['姓名'] = df_a['姓名'].ffill()
+            df_q.columns = [str(c).strip() for c in df_q.columns]
             
-            # 1. 處理志願
+            # 解析學生志願
             apps = []
             for _, row in df_a.iterrows():
                 if pd.notna(row.get('申請科別')) and pd.notna(row.get('實習期間')):
-                    s, e, d = parse_dates(row['實習期間'])
+                    s, e, d = parse_period(row['實習期間'])
                     if s:
                         apps.append({'姓名': row['姓名'], '科別': str(row['申請科別']).strip(), '開始': s, '結束': e, '天數': d})
             
-            # 2. 容額檢查
-            df_q.columns = [str(c).strip() for c in df_q.columns]
+            # 容額碰撞偵測 (橫向日期比對)
             date_cols = [c for c in df_q.columns if '-' in c and any(i.isdigit() for i in c)]
             collisions = []
             for _, q_row in df_q.iterrows():
-                dept = q_row.get('科別')
-                if pd.isna(dept): continue
+                dept = str(q_row.get('科別', '')).strip()
+                if not dept or dept == 'nan': continue
+                
                 for col in date_cols:
-                    cap = q_row.get(col)
-                    if pd.isna(cap) or not str(cap).isdigit(): continue
+                    cap_raw = q_row.get(col)
+                    try:
+                        cap_val = int(float(cap_raw))
+                    except: continue # 若該格沒填數字則跳過
+                    
+                    # 解析該時段的日期區間
                     pts = col.split('-')
-                    # 簡化日期判斷，僅抓取 M/D
-                    st_in_slot = [a['姓名'] for a in apps if a['科別'] == str(dept).strip()] # 此處應配合日期判斷，為求呈現結果暫以科別計
-                    if len(st_in_slot) > int(float(cap)):
-                        collisions.append({"科別": dept, "時間": col, "容額": int(float(cap)), "超額學生": "、".join(set(st_in_slot))})
+                    s_slot = parse_date_simple(pts[0])
+                    e_slot = parse_date_simple(pts[1]) if len(pts) > 1 else s_slot
+                    if not s_slot or not e_slot: continue
+                    
+                    # 精準判定：學生的實習區間是否與此時段重疊
+                    st_in_slot = [a['姓名'] for a in apps if a['科別'] == dept and a['開始'] <= e_slot and s_slot <= a['結束']]
+                    
+                    if len(st_in_slot) > cap_val:
+                        collisions.append({
+                            "科別": dept, "時間": col, "容額": cap_val, "超額學生": "、".join(list(set(st_in_slot)))
+                        })
+
+            # 週數與 Course 檢查
+            invalid = []
+            if apps:
+                df_temp = pd.DataFrame(apps)
+                for name, group in df_temp.groupby('姓名'):
+                    total_d = group['天數'].sum()
+                    for _, r in group.iterrows():
+                        if r['天數'] < course_days:
+                            invalid.append({"姓名": name, "原因": f"{r['科別']} 實習天數不足({r['天數']}天)，未達 Course 要求"})
+                    if total_d < min_total_days:
+                        invalid.append({"姓名": name, "原因": f"總實習天數({total_d}天)未達要求"})
 
             st.header("異常監控結果")
             if collisions:
+                st.subheader("名額撞期名單")
                 st.table(pd.DataFrame(collisions))
-            else:
-                st.success("名額與規章核對完成，目前一切正常。")
+            
+            if invalid:
+                st.subheader("規章不符名單")
+                st.table(pd.DataFrame(invalid).drop_duplicates())
+                
+            if not collisions and not invalid:
+                st.success("核對完成，目前一切正常。")
 
 # --- 模式：系秘 ---
 elif mode == "系秘":
     st.title("跨院重複佔位檢查")
-    st.markdown("此模式專供系秘比對不同醫院間是否有學生重複佔位。")
-    
     multi_files = st.file_uploader("上傳各院志願清單 (可多選)", type=['xlsx'], accept_multiple_files=True)
     
     if multi_files:
@@ -145,16 +176,14 @@ elif mode == "系秘":
                 if len(s_apps) > 1:
                     for i in range(len(s_apps)):
                         for j in range(i + 1, len(s_apps)):
-                            # 跨檔案日期重疊判斷
-                            d1_s, d1_e, _ = parse_dates(s_apps[i]['實習期間'])
-                            d2_s, d2_e, _ = parse_dates(s_apps[j]['實習期間'])
+                            d1_s, d1_e, _ = parse_period(s_apps[i]['實習期間'])
+                            d2_s, d2_e, _ = parse_period(s_apps[j]['實習期間'])
                             if d1_s and d2_s and (d1_s <= d2_e and d2_s <= d1_e):
                                 conflicts.append({
                                     "姓名": name,
                                     "醫院 A": s_apps[i]['來源醫院'], "時段 A": s_apps[i]['實習期間'],
                                     "醫院 B": s_apps[j]['來源醫院'], "時段 B": s_apps[j]['實習期間']
                                 })
-            
             if conflicts:
                 st.subheader("偵測到跨院衝突名單")
                 st.table(pd.DataFrame(conflicts).drop_duplicates())
