@@ -11,7 +11,7 @@ if "require_cont" not in st.session_state: st.session_state.require_cont = True
 # 頁面基本設定
 st.set_page_config(page_title="醫學系實習選配管理系統", layout="wide")
 
-# --- 莫蘭迪色系 + 強制純宋體 CSS (無 Emoji) ---
+# --- 莫蘭迪色系 + 強制純宋體 + 霸道換行 CSS ---
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;700&display=swap');
@@ -30,37 +30,41 @@ st.markdown("""
     .stButton > button:hover { background-color: #72827A !important; }
     .btn-secondary > button { background-color: #C0BFB8 !important; }
 
-    /* 表格樣式 */
-    .stTable { font-size: 14px; background-color: #FFFFFF; }
-    th { background-color: #E3E1DB !important; color: #4A4C4B !important; text-align: left !important;}
-    td { white-space: pre-wrap !important; vertical-align: top !important; line-height: 1.8 !important; }
+    /* 表格樣式：暴力破解強制換行 */
+    [data-testid="stTable"] { font-size: 14px; background-color: #FFFFFF; width: 100%; }
+    [data-testid="stTable"] th { background-color: #E3E1DB !important; color: #4A4C4B !important; text-align: left !important;}
+    [data-testid="stTable"] td { 
+        white-space: pre-wrap !important; 
+        word-break: break-word !important;
+        vertical-align: top !important; 
+        line-height: 1.8 !important; 
+    }
     </style>
     """, unsafe_allow_html=True)
 
 # --- 核心工具函式 ---
 def safe_read_excel(file, target_keywords):
-    """終極安全讀取：強制取消預設標題，從第 0 行開始掃描"""
+    """終極安全讀取：無視所有空白、強制對齊標題"""
     try:
         xls = pd.ExcelFile(file)
-        target = next((sn for sn in xls.sheet_names if any(k in sn for k in ["志願", "名單", "工作表4", "實習容額", "時段"])), xls.sheet_names[0])
+        target = next((sn for sn in xls.sheet_names if any(k in sn for k in ["志願", "名單", "工作表", "實習容額", "時段"])), xls.sheet_names[0])
         
-        # 強制 header=None，確保 Excel 第一行絕對不會被漏掉
         df_raw = pd.read_excel(file, sheet_name=target, header=None)
         
         for i in range(min(len(df_raw), 20)):
-            row_vals = [str(x).strip() for x in df_raw.iloc[i].values]
-            # 只要該列包含我們設定的關鍵字 (例如：姓名、科別)，就認定為標題列
+            # 暴力清除所有空白與不可見字元
+            row_vals = [re.sub(r'\s+', '', str(x)) for x in df_raw.iloc[i].values]
             if any(kw in val for kw in target_keywords for val in row_vals):
                 df = pd.read_excel(file, sheet_name=target, header=i)
-                df.columns = [str(c).strip() for c in df.columns]
+                # 欄位名稱同樣暴力清除空白，避免 KeyError
+                df.columns = [re.sub(r'\s+', '', str(c)) for c in df.columns]
                 return df
                 
-        # 萬一都沒找到，直接以預設方式讀取
-        df_fallback = pd.read_excel(file, sheet_name=target)
-        df_fallback.columns = [str(c).strip() for c in df_fallback.columns]
-        return df_fallback
-    except Exception as e:
-        return None
+        # 萬一真的沒找到，退回預設讀取
+        df_fb = pd.read_excel(file, sheet_name=target)
+        df_fb.columns = [re.sub(r'\s+', '', str(c)) for c in df_fb.columns]
+        return df_fb
+    except: return None
 
 def extract_dates_universal(text, year=2026):
     """加強版日期解析：處理換行符號與各種怪異間隔符"""
@@ -88,50 +92,46 @@ st.sidebar.title("系統模式")
 mode = st.sidebar.radio("身份選擇", ["醫院代表", "系秘"])
 st.sidebar.divider()
 st.sidebar.markdown('<div class="btn-secondary">', unsafe_allow_html=True)
-if st.sidebar.button("重新整理系統"):
-    st.rerun()
+if st.sidebar.button("重新整理系統"): st.rerun()
 st.sidebar.markdown('</div>', unsafe_allow_html=True)
 
 # --- 醫院代表模式 ---
 if mode == "醫院代表":
     st.title("醫院內部容額與規章審核")
     
-    # 規則設定區
     with st.expander("規則設定 (點擊展開修改)", expanded=False):
         c_cfg1, c_cfg2, c_cfg3 = st.columns(3)
         st.session_state.course_dur_weeks = c_cfg1.number_input("一個 Course 多久 (週)", 1, 10, st.session_state.course_dur_weeks)
         st.session_state.min_weeks_req = c_cfg2.number_input("最短實習週數要求 (週)", 1, 52, st.session_state.min_weeks_req)
         st.session_state.require_cont = c_cfg3.checkbox("要求必須連續實習", st.session_state.require_cont)
-        if st.button("儲存規則條件"): 
-            st.success("條件已更新")
+        if st.button("儲存規則條件"): st.success("條件已更新")
 
     st.divider()
     
-    # 檔案上傳區
     c1, c2 = st.columns(2)
     q_file = c1.file_uploader("上傳醫院容額表", type=['xlsx'])
     a_file = c2.file_uploader("上傳學生志願表", type=['xlsx'])
     
-    # 單向觸發：按下後直接執行並顯示結果，避免畫面跳轉
     if st.button("確認並開始比對"):
         if q_file and a_file:
-            # 針對容額表與志願表設定專屬關鍵字，確保精準抓取 Header
             df_q = safe_read_excel(q_file, ["科別", "容額"])
-            df_a = safe_read_excel(a_file, ["姓名", "申請科別", "科別"])
+            df_a = safe_read_excel(a_file, ["姓名", "科別"])
             
             if df_q is not None and df_a is not None:
-                # 防呆：確認是否有姓名欄位
-                if '姓名' not in df_a.columns:
-                    st.error("學生志願表中找不到「姓名」欄位，請檢查表頭。")
-                    st.stop()
-                    
-                df_a['姓名'] = df_a['姓名'].ffill()
+                # 動態尋找姓名欄位，徹底解決 KeyError
+                name_col = next((c for c in df_a.columns if "姓名" in c or "學生" in c), None)
                 dept_col = next((c for c in df_a.columns if "科別" in c), None)
                 time_col = next((c for c in df_a.columns if "期間" in c or "時間" in c), None)
                 
+                if not name_col:
+                    st.error("學生志願表中找不到「姓名」欄位，請檢查表頭是否有拼寫錯誤。")
+                    st.stop()
                 if not dept_col or not time_col:
                     st.error("學生志願表中缺少「科別」或「實習期間」欄位。")
                     st.stop()
+
+                # 將動態找到的姓名欄位統一標準化
+                df_a['姓名'] = df_a[name_col].ffill()
 
                 apps = []
                 for _, r in df_a.iterrows():
@@ -139,7 +139,6 @@ if mode == "醫院代表":
                         s, e, d = parse_period_dates(r[time_col])
                         if s: apps.append({'姓名': r['姓名'], '科別': str(r[dept_col]).strip(), '開始': s, '結束': e, '天數': d})
                 
-                # 容額比對
                 date_cols = [c for c in df_q.columns if extract_dates_universal(c)[0]]
                 q_dept_col = next((c for c in df_q.columns if "科別" in c), df_q.columns[0])
                 collisions = []
@@ -155,7 +154,6 @@ if mode == "醫院代表":
                         if len(st_in) > cap:
                             collisions.append({"科別": dept, "時間": str(col).replace('\n',' '), "容額": cap, "超額學生": "、".join(list(set(st_in)))})
 
-                # 規章檢查
                 invalid = []
                 df_temp = pd.DataFrame(apps)
                 if not df_temp.empty:
@@ -194,14 +192,16 @@ elif mode == "系秘":
         if multi_files:
             all_data = []
             for f in multi_files:
-                df = safe_read_excel(f, ["姓名", "申請科別", "科別"])
-                if df is not None and '姓名' in df.columns:
-                    df['姓名'] = df['姓名'].ffill()
-                    df['來源醫院'] = f.name.split('.')[0]
-                    time_col = next((c for c in df.columns if "期間" in c or "時間" in c), None)
-                    if time_col:
-                        df['_time_val'] = df[time_col]
-                        all_data.append(df[df['_time_val'].notna()])
+                df = safe_read_excel(f, ["姓名", "科別"])
+                if df is not None:
+                    name_col = next((c for c in df.columns if "姓名" in c or "學生" in c), None)
+                    if name_col:
+                        df['姓名'] = df[name_col].ffill()
+                        df['來源醫院'] = f.name.split('.')[0]
+                        time_col = next((c for c in df.columns if "期間" in c or "時間" in c), None)
+                        if time_col:
+                            df['_time_val'] = df[time_col]
+                            all_data.append(df[df['_time_val'].notna()])
             
             if all_data:
                 full = pd.concat(all_data, ignore_index=True)
@@ -215,10 +215,12 @@ elif mode == "系秘":
                             s2, e2, _ = parse_period_dates(recs[j]['_time_val'])
                             if s1 and s2 and (s1 <= e2 and s2 <= e1): hit.update([i, j])
                     if hit:
+                        # 完美條列式：使用 \n 連接
                         details = "\n".join([f"• {recs[idx]['來源醫院']} ({str(recs[idx]['_time_val']).strip()})" for idx in sorted(list(hit))])
                         conflicts.append({"姓名": name, "衝突詳情": details})
                 if conflicts:
                     st.subheader("偵測到重疊佔位")
+                    # 使用 st.table 渲染完美換行
                     st.table(pd.DataFrame(conflicts).set_index('姓名'))
                 else: 
                     st.success("無跨院重疊佔位。")
