@@ -6,7 +6,7 @@ import re
 # 頁面基本設定
 st.set_page_config(page_title="醫學系實習選配管理系統", layout="wide")
 
-# --- 高級感 CSS (宋體 + 黑白灰 + 支援手動換行) ---
+# --- 高級感 CSS (宋體 + 黑白灰 + 支援條列式換行) ---
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;700&display=swap');
@@ -24,13 +24,13 @@ st.markdown("""
     section[data-testid="stSidebar"] { background-color: #FFFFFF; border-right: 1px solid #DDDDDD; }
     .stButton>button { color: #FFFFFF !important; background-color: #000000 !important; border-radius: 0px; width: 100%; }
     
-    /* 表格設定：支援換行符號，並讓文字垂直置中 */
+    /* 表格設定：保留換行符號 (\n)，並讓文字向上對齊，適合條列式閱讀 */
     .stTable { font-size: 14px; }
     th, td {
-        white-space: pre-line !important; 
+        white-space: pre-wrap !important; 
         word-break: keep-all !important;
-        vertical-align: middle !important;
-        line-height: 1.6 !important;
+        vertical-align: top !important; 
+        line-height: 1.8 !important;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -219,11 +219,12 @@ elif mode == "系秘":
                         for idx in sorted(list(conflict_set)):
                             hosp = s_apps[idx]['來源醫院']
                             period = str(s_apps[idx]['實習期間']).replace('\n', '')
-                            details.append(f"{hosp} ({period})")
+                            # 【關鍵修改】加上減號並確保這是一個獨立的項目
+                            details.append(f"- {hosp} ({period})")
                         
                         conflicts.append({
                             "姓名": name,
-                            # 關鍵更改：用換行符號取代原本的直線
+                            # 【關鍵修改】使用換行符號取代原本的直線
                             "衝突詳情": "\n".join(details)
                         })
                         
