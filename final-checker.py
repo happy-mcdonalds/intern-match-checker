@@ -3,7 +3,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 import re
 
-# --- 1. 初始化系統記憶 ---
+# --- 初始化系統記憶 ---
 if "course_dur_weeks" not in st.session_state: st.session_state.course_dur_weeks = 2
 if "min_weeks_req" not in st.session_state: st.session_state.min_weeks_req = 4
 if "require_cont" not in st.session_state: st.session_state.require_cont = True
@@ -11,24 +11,18 @@ if "require_cont" not in st.session_state: st.session_state.require_cont = True
 # 頁面基本設定
 st.set_page_config(page_title="醫學系實習選配管理系統", layout="wide")
 
-# --- 2. 莫蘭迪色系 + 強制全域黑體 (無宋體) ---
+# --- 莫蘭迪色系 + 全域黑體 (修復 Icon 消失問題) ---
 st.markdown("""
     <style>
-    /* 全域使用黑體 */
-    html, body, [class*="css"], [data-testid="stAppViewContainer"], .stApp {
-        font-family: "Microsoft JhengHei", "Heiti TC", sans-serif !important;
+    /* 全域使用黑體，但不干擾 Streamlit 內建 Icon */
+    html, body, [data-testid="stAppViewContainer"], .stApp {
+        font-family: "Microsoft JhengHei", "Heiti TC", "Apple LiGothic Medium", sans-serif !important;
         background-color: #F5F4F1 !important; 
         color: #5C5E5D !important; 
     }
     
-    /* 檔案上傳區字體修正 */
-    [data-testid="stFileUploaderLabel"], 
-    [data-testid="stFileUploadDropzone"] div, 
-    [data-testid="stUploadedFile"] div, span, label, p {
-        font-family: "Microsoft JhengHei", sans-serif !important;
-    }
-    
     h1, h2, h3 { 
+        font-family: "Microsoft JhengHei", "Heiti TC", sans-serif !important;
         color: #4A4C4B !important; 
         border-bottom: 1px solid #D6D4CE; 
         padding-bottom: 5px; 
@@ -55,6 +49,7 @@ st.markdown("""
         border-radius: 4px !important; 
         width: 100%; 
         transition: 0.3s;
+        font-family: "Microsoft JhengHei", "Heiti TC", sans-serif !important;
     }
     .stButton > button:hover, [data-testid="stFormSubmitButton"] > button:hover {
         background-color: #72827A !important;
@@ -65,28 +60,34 @@ st.markdown("""
         color: #FFFFFF !important;
     }
     
-    /* 網頁表格樣式 */
-    .html-table { width: 100%; border-collapse: collapse; background-color: white; border: 1px solid #D6D4CE; }
+    /* 網頁表格樣式 (強制換行) */
+    .html-table { width: 100%; border-collapse: collapse; background-color: white; border: 1px solid #D6D4CE; font-family: "Microsoft JhengHei", sans-serif; }
     .html-table th { background-color: #E3E1DB; color: #4A4C4B; padding: 12px; text-align: left; border-bottom: 2px solid #C0BFB8; }
     .html-table td { padding: 12px; border-bottom: 1px solid #EAE8E3; vertical-align: top; line-height: 1.6; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- 3. 核心工具函式 ---
+# --- 核心工具函式 ---
 
 def smart_read_sheet(file):
-    """最強力讀取引擎：解決重複標題、排除範例、對接各種欄位名稱"""
+    """改良讀取：精準尋找「確定名單」，並將日期欄位自動對齊"""
     try:
         xls = pd.ExcelFile(file)
-        # 如果只有一頁就選那一頁，否則找包含「確定」的分頁
+        
+        # 1. 優先尋找確定名單 (避開充滿甄漂亮的志願申請名單)
         target_sheet = xls.sheet_names[0]
-        if len(xls.sheet_names) > 1:
+        for sn in xls.sheet_names:
+            if "確定" in sn or "正式" in sn:
+                target_sheet = sn
+                break
+        else:
+            # 退而求其次尋找包含名單的分頁，但避開「先寫這個」
             for sn in xls.sheet_names:
-                if any(k in sn for k in ["確定", "名單", "正式"]):
+                if any(k in sn for k in ["志願", "名單", "容額"]) and "先寫" not in sn:
                     target_sheet = sn
                     break
         
-        # 掃描標題列
+        # 2. 掃描標題列
         df_scan = pd.read_excel(file, sheet_name=target_sheet, header=None, nrows=15)
         h_idx = 0
         for i, row in df_scan.iterrows():
@@ -97,38 +98,41 @@ def smart_read_sheet(file):
         
         df = pd.read_excel(file, sheet_name=target_sheet, header=h_idx)
         
-        # 解決重複標籤問題 (防止 ValueError)
+        # 解決重複標籤問題
         df = df.loc[:, ~df.columns.duplicated()].copy()
         df.columns = [str(c).strip().replace('\n', '') for c in df.columns]
         
-        # 欄位自動對接 (模糊匹配)
+        # 3. 欄位自動對接 (模糊匹配)
         rename_map = {}
         for c in df.columns:
             if "姓名" in c: rename_map[c] = "姓名"
             elif "科別" in c or "申請科別" in c: rename_map[c] = "科別"
-            elif "實習期間" in c or "日期" in c: rename_map[c] = "日期欄位"
+            # 只有當沒有「開始/結束」時，才將日期欄位直接改名，避免重複
+            elif ("實習期間" in c or "日期" in c) and "開始" not in c and "結束" not in c: 
+                rename_map[c] = "日期欄位"
         df = df.rename(columns=rename_map)
         
-        # 處理日期分開兩格的情況 (開始日期, 結束日期)
+        # 4. 處理日期分開兩格的情況 (開始日期, 結束日期)
         if "日期欄位" not in df.columns:
             start = next((c for c in df.columns if "開始" in c), None)
             end = next((c for c in df.columns if "結束" in c), None)
             if start and end:
                 df["日期欄位"] = df[start].astype(str) + " - " + df[end].astype(str)
         
-        # 過濾「甄漂亮」或「範例」
+        # 5. 過濾掉「甄漂亮」或「範例」，確保只留真實學生
         if "姓名" in df.columns:
             df = df[~df['姓名'].astype(str).str.contains('甄漂亮|範例|例|說明|空白', na=False)]
             
         return df
     except Exception as e:
-        st.error(f"讀取失敗：{e}")
         return None
 
 def extract_dates_universal(text, year=2026):
+    if pd.isna(text) or str(text).strip() == 'nan': return None, None
     if isinstance(text, datetime): return text, text
+    # 將所有換行、空格轉為橫線，並防止雙橫線導致解析失敗
     s = re.sub(r'[\n\r\s]+', '-', str(text)).strip()
-    s = re.sub(r'-+', '-', s) # 防止 5/4-\n5/8 變成雙橫線
+    s = re.sub(r'-+', '-', s)
     parts = re.split(r'[-~～到至_]+', s)
     
     def parse_part(part):
@@ -150,7 +154,7 @@ def parse_period_dates(p_str):
         return s, e, len(pd.bdate_range(s, e))
     return None, None, 0
 
-# --- 4. UI 介面 ---
+# --- UI 介面 ---
 
 st.sidebar.title("系統模式")
 mode = st.sidebar.radio("身份選擇", ["醫院代表", "系秘"])
@@ -189,6 +193,9 @@ if mode == "醫院代表":
             if df_a is not None and '姓名' in df_a.columns:
                 df_a['姓名'] = df_a['姓名'].ffill()
                 apps = []
+                # 確保姓名欄位不為空
+                df_a = df_a[df_a['姓名'].notna()]
+                
                 for _, row in df_a.iterrows():
                     d_val, t_val = row.get('科別'), row.get('日期欄位')
                     if pd.notna(d_val) and pd.notna(t_val):
@@ -210,12 +217,32 @@ if mode == "醫院代表":
                         if len(st_in) > cap:
                             collisions.append({"科別": dept, "時間": str(col).replace('\n', ' '), "容額": cap, "超額學生": "、".join(list(set(st_in)))})
 
+                invalid = []
+                if apps:
+                    df_temp = pd.DataFrame(apps)
+                    for name, gp in df_temp.groupby('姓名'):
+                        gp = gp.sort_values('開始')
+                        if gp['天數'].sum() < st.session_state.min_weeks_req * 5:
+                            invalid.append({"姓名": name, "原因": f"總實習天數不足 ({gp['天數'].sum()} 天)"})
+                        for _, r in gp.iterrows():
+                            if r['天數'] < st.session_state.course_dur_weeks * 5:
+                                invalid.append({"姓名": name, "原因": f"{r['科別']} 週數不足"})
+                        if st.session_state.require_cont and len(gp) > 1:
+                            recs = gp.to_dict('records')
+                            for i in range(len(recs)-1):
+                                if (recs[i+1]['開始'] - recs[i]['結束']).days > 3:
+                                    invalid.append({"姓名": name, "原因": "時段未連續實習"})
+                                    break
+
                 st.header("分析結果")
                 if collisions:
                     st.subheader("名額撞期名單")
                     st.table(pd.DataFrame(collisions))
-                else: st.success("目前一切正常。")
-            else: st.error("找不到姓名欄位，請確認 Excel 第一列標題。")
+                if invalid:
+                    st.subheader("規章不符名單")
+                    st.table(pd.DataFrame(invalid).drop_duplicates())
+                if not collisions and not invalid: st.success("核對完成，查無異常。")
+            else: st.error("檔案內找不到學生姓名，請確認上傳的表格是否有資料。")
 
 elif mode == "系秘":
     st.title("跨院重複佔位檢查")
@@ -228,7 +255,7 @@ elif mode == "系秘":
                 df['姓名'] = df['姓名'].ffill()
                 df['來源'] = f.name.replace('.xlsx', '')
                 if '日期欄位' in df.columns:
-                    df = df[df['日期欄位'].notna() & (df['日期欄位'] != 'nan')]
+                    df = df[df['日期欄位'].notna() & (df['日期欄位'].astype(str) != 'nan')]
                     all_d.append(df)
         
         if all_d:
@@ -244,16 +271,16 @@ elif mode == "系秘":
                         s2, e2 = extract_dates_universal(recs[j]['日期欄位'])
                         if s1 and s2 and (s1 <= e2 and s2 <= e1): hit.update([i, j])
                 if hit:
-                    # 使用 <br> 標籤實現換行
+                    # 使用 HTML 的 <br> 確保換行
                     details = "<br>".join([f"• {recs[idx]['來源']} ({str(recs[idx]['日期欄位']).strip()})" for idx in sorted(list(hit))])
                     conflicts.append({"姓名": name, "衝突詳情": details})
             
             if conflicts:
                 st.subheader("偵測到跨院重複佔位")
-                # 使用 HTML 渲染表格，確保換行符號 <br> 生效
+                # 使用 HTML 繪製表格
                 html_code = '<table class="html-table"><tr><th>姓名</th><th>衝突詳情</th></tr>'
                 for c in conflicts:
                     html_code += f'<tr><td>{c["姓名"]}</td><td>{c["衝突詳情"]}</td></tr>'
                 html_code += '</table>'
                 st.markdown(html_code, unsafe_allow_html=True)
-            else: st.success("查無重複佔位，一切正常。")
+            else: st.success("查無重複佔位，目前名單一切正常。")
