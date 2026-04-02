@@ -187,7 +187,7 @@ if st.sidebar.button("重新整理系統"):
     st.rerun()
 
 if mode == "醫院代表":
-    st.title("醫院容額與實習規則")
+    st.title("醫院內部容額與規章審核")
     
     with st.form("settings_form"):
         st.markdown("### 規則設定")
@@ -206,11 +206,11 @@ if mode == "醫院代表":
     col_q, col_a = st.columns(2)
     with col_q:
         q_file = st.file_uploader("上傳醫院容額表", type=['xlsx'])
-        st.caption("請上傳「醫院空白表格」，並確保檔案中只有這個分頁")
+        st.caption("請上傳「醫院空白表格」，請確保檔案中只有這個分頁")
         
     with col_a:
         a_file = st.file_uploader("上傳學生志願表", type=['xlsx'])
-        st.caption("請上傳「志願申請名單(先寫這個寄給對方)」，並確保檔案中只有這個分頁")
+        st.caption("請上傳「志願申請名單(先寫這個寄給對方)」，請確保檔案中只有這個分頁")
     
     st.markdown("<br>", unsafe_allow_html=True)
     if st.button("確認並開始比對"):
@@ -284,14 +284,14 @@ if mode == "醫院代表":
             st.dataframe(df_col, use_container_width=True)
             # 轉換為含 BOM 的 UTF-8 確保 Excel 開啟中文不亂碼
             csv_col = df_col.to_csv(index=False).encode('utf-8-sig')
-            st.download_button(label="下載撞期名單 (CSV)", data=csv_col, file_name="名額撞期名單.csv", mime="text/csv")
+            st.download_button(label="下載撞期名單 (CSV)", data=csv_col, file_name="撞期名單.csv", mime="text/csv")
         
         if inv_data:
             st.subheader("不符合實習規定名單")
             df_inv = pd.DataFrame(inv_data).drop_duplicates()
             st.dataframe(df_inv, use_container_width=True)
             csv_inv = df_inv.to_csv(index=False).encode('utf-8-sig')
-            st.download_button(label="下載規章不符名單 (CSV)", data=csv_inv, file_name="規章不符名單.csv", mime="text/csv")
+            st.download_button(label="下載不符合實習規定名單 (CSV)", data=csv_inv, file_name="不符合實習規定名單.csv", mime="text/csv")
             
         if not col_data and not inv_data: 
             st.success("核對完成，查無異常。")
@@ -300,7 +300,7 @@ elif mode == "系秘":
     st.title("跨院重複佔位檢查")
     
     m_files = st.file_uploader("上傳各院清單 (可多選)", type=['xlsx'], accept_multiple_files=True)
-    st.caption("請上傳「確定實習名單(確定好名單寫此表單)」的檔案，並確保檔案中只有這個分頁")
+    st.caption("請上傳「確定實習名單(確定好名單寫此表單)」的檔案，請確保檔案中只有這個分頁")
     st.markdown("<br>", unsafe_allow_html=True)
     
     if st.button("確認並開始比對") and m_files:
@@ -328,7 +328,7 @@ elif mode == "系秘":
                 
                 if hit:
                     details = "<br>".join([f"• {recs[idx]['來源']} ({str(recs[idx]['日期欄位']).replace('nan','').strip()})" for idx in sorted(list(hit))])
-                    conflicts.append({"姓名": name, "衝突詳情": details})
+                    conflicts.append({"姓名": name, "重疊醫院": details})
             
             # 將結果存入 Session State
             st.session_state.sec_run = True
@@ -341,18 +341,18 @@ elif mode == "系秘":
     if st.session_state.sec_run:
         conflicts = st.session_state.sec_conf_data
         if conflicts:
-            st.subheader("重複申請名單")
-            html_table = "<table class='html-table'><tr><th>姓名</th><th>衝突詳情</th></tr>"
+            st.subheader("重複申請")
+            html_table = "<table class='html-table'><tr><th>姓名</th><th>重疊醫院</th></tr>"
             for c in conflicts:
-                html_table += f"<tr><td>{c['姓名']}</td><td>{c['衝突詳情']}</td></tr>"
+                html_table += f"<tr><td>{c['姓名']}</td><td>{c['重疊醫院']}</td></tr>"
             html_table += "</table>"
             st.markdown(html_table, unsafe_allow_html=True)
             
             # 準備 CSV 下載 (將 HTML 的 <br> 替換回正常的換行符號 \n)
             df_export = pd.DataFrame(conflicts)
-            df_export['衝突詳情'] = df_export['衝突詳情'].str.replace('<br>', '\n')
+            df_export['重疊醫院'] = df_export['重疊醫院'].str.replace('<br>', '\n')
             csv_sec = df_export.to_csv(index=False).encode('utf-8-sig')
             
-            st.download_button(label="📥 下載跨院重疊名單 (CSV)", data=csv_sec, file_name="跨院重疊佔位名單.csv", mime="text/csv")
+            st.download_button(label="下載跨院重疊名單 (CSV)", data=csv_sec, file_name="跨院重複申請名單.csv", mime="text/csv")
         else: 
-            st.success("無重複申請，目前名單一切正常。")
+            st.success("查無重複申請，目前名單一切正常。")
