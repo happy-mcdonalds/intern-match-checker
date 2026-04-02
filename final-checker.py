@@ -14,7 +14,7 @@ if "require_cont" not in st.session_state:
 # 頁面基本設定
 st.set_page_config(page_title="醫學系實習選配管理系統", layout="wide")
 
-# --- CSS 視覺設定：黑體 + 莫蘭迪色 + 中文化極簡上傳框 ---
+# --- CSS 視覺設定：黑體 + 莫蘭迪色 + 溫和中文化上傳框 ---
 st.markdown("""
     <style>
     /* 全局無襯線黑體 */
@@ -28,7 +28,7 @@ st.markdown("""
         color: #5C5E5D !important; 
     }
     
-    /* 標題設計 (乾淨俐落) */
+    /* 標題設計 */
     h1, h2, h3 { 
         color: #3B4441 !important; 
         border-bottom: 2px solid #D6D4CE; 
@@ -93,64 +93,41 @@ st.markdown("""
         padding: 10px 12px !important;
     }
 
-    /* ======= 檔案上傳區塊：極簡化 ======= */
+    /* ======= 檔案上傳區塊：不撐爆版面的極簡中文版 ======= */
     [data-testid="stFileUploadDropzone"] {
         background-color: #FFFFFF !important;
         border: 1px dashed #C0BFB8 !important;
         border-radius: 8px !important;
-        padding: 20px 10px !important;
-        width: 100% !important; /* 確保不超出 column */
-        box-sizing: border-box !important;
-        display: flex !important;
-        flex-direction: column !important;
-        align-items: center !important;
-        justify-content: center !important;
+        transition: 0.3s;
+    }
+    [data-testid="stFileUploadDropzone"]:hover {
+        border-color: #8A9A92 !important;
+        background-color: #FBFBFA !important;
     }
 
-    /* 1. 隱藏預設的雲朵圖示 (消滅醜物) */
+    /* 隱藏醜圖示 */
     [data-testid="stFileUploadDropzone"] svg {
         display: none !important;
     }
 
-    /* 2. 隱藏預設的英文字 */
-    [data-testid="stFileUploadDropzone"] > div:first-child * {
-        font-size: 0px !important;
-        color: transparent !important;
-        margin: 0 !important;
+    /* 隱藏預設的英文文字與預設按鈕 (避免影響排版) */
+    [data-testid="stFileUploadDropzone"] > div > div > span,
+    [data-testid="stFileUploadDropzone"] > div > div > small,
+    [data-testid="stFileUploadDropzone"] button {
+        display: none !important;
     }
 
-    /* 3. 注入純淨的中文說明 */
-    [data-testid="stFileUploadDropzone"] > div:first-child::after {
-        content: "拖曳檔案至此";
+    /* 安全地注入中文說明，不影響外部寬度 */
+    [data-testid="stFileUploadDropzone"] > div > div::before {
+        content: "拖曳檔案至此\\A或點擊選擇檔案";
+        white-space: pre;
         display: block;
         color: #5C5E5D !important;
-        font-size: 14px !important;
-        margin-bottom: 12px;
+        font-size: 15px !important;
+        font-weight: bold;
         text-align: center;
-    }
-
-    /* 4. 修改 Browse files 按鈕 */
-    [data-testid="stFileUploadDropzone"] button {
-        position: relative !important;
-        width: 120px !important;
-        border: none !important;
-        background: transparent !important;
-        margin: 0 auto !important;
-    }
-    [data-testid="stFileUploadDropzone"] button * { display: none !important; }
-    [data-testid="stFileUploadDropzone"] button::before {
-        content: "選擇檔案";
-        display: flex; align-items: center; justify-content: center;
-        background-color: #EAE8E3 !important;
-        color: #4A4C4B !important;
-        font-size: 13px;
-        padding: 6px 0;
-        border-radius: 4px;
-        border: 1px solid #D6D4CE !important;
-        transition: 0.2s;
-    }
-    [data-testid="stFileUploadDropzone"] button:hover::before {
-        background-color: #D6D4CE !important;
+        line-height: 1.8;
+        padding: 30px 0; /* 給予適當的高度留白 */
     }
     </style>
     """, unsafe_allow_html=True)
@@ -158,6 +135,7 @@ st.markdown("""
 # --- 核心工具函式 ---
 def smart_read_sheet(file):
     try:
+        file.seek(0) # 關鍵修復：將檔案指標歸零
         if file.name.endswith('.csv'):
             df_temp = pd.read_csv(file, header=None)
             target_sheet = None
@@ -178,12 +156,14 @@ def smart_read_sheet(file):
                 header_idx = i
                 break
         
+        file.seek(0) # 關鍵修復：把檔案指標「倒轉」回最前面，否則第二次會讀到空檔案
+        
         if file.name.endswith('.csv'):
             df = pd.read_csv(file, header=header_idx)
         else:
             df = pd.read_excel(file, sheet_name=target_sheet, header=header_idx)
         
-        # 嚴謹的欄位重新命名（避免「備選科別」導致欄位名稱重複衝突）
+        # 嚴謹的欄位重新命名
         cols = []
         for c in df.columns:
             c_str = str(c).strip().replace('\n', '').replace(' ', '')
@@ -192,12 +172,11 @@ def smart_read_sheet(file):
             elif "期間" in c_str:
                 cols.append("實習期間")
             elif ("科別" in c_str or "科" in c_str) and "科別" not in cols:
-                cols.append("科別") # 只把第一個符合的當作主要科別，避開備選科別
+                cols.append("科別") 
             else:
                 cols.append(c_str)
         df.columns = cols
         
-        # 更強大的開始與結束抓取邏輯 (不需要"日期"兩個字也能抓到)
         start_col = next((c for c in df.columns if "開始" in str(c)), None)
         end_col = next((c for c in df.columns if "結束" in str(c)), None)
         
@@ -289,7 +268,7 @@ if mode == "醫院代表":
         total_min_workdays = st.session_state.min_weeks_req * 5
         
         try:
-            # 智慧讀取容額表 (自動定位「科別」與「時段」所在的標題列)
+            q_file.seek(0) # 關鍵修復
             if q_file.name.endswith('.csv'):
                 df_q_temp = pd.read_csv(q_file, header=None)
             else:
@@ -305,6 +284,8 @@ if mode == "醫院代表":
                     header_q_idx = i
                     break
 
+            q_file.seek(0) # 關鍵修復
+            
             if q_file.name.endswith('.csv'):
                 df_q = pd.read_csv(q_file, header=header_q_idx)
             else:
@@ -312,7 +293,7 @@ if mode == "醫院代表":
             
             df_q.columns = [str(c).strip() for c in df_q.columns]
 
-            # 讀取申請表
+            # 讀取申請表 (內部已加入 file.seek(0) 解決讀不到的問題)
             df_a = smart_read_sheet(a_file)
 
             if df_q is not None and df_a is not None:
