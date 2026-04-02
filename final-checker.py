@@ -14,47 +14,57 @@ if "require_cont" not in st.session_state:
 # 頁面基本設定
 st.set_page_config(page_title="醫學系實習選配管理系統", layout="wide")
 
-# --- 莫蘭迪色系 + 強制純宋體 CSS ---
+# --- CSS 視覺設定：黑體 + 莫蘭迪色 + 中文化極簡上傳框 ---
 st.markdown("""
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;700&display=swap');
+    /* 全局無襯線黑體 */
+    * {
+        font-family: "PingFang TC", "微軟正黑體", "Helvetica Neue", Helvetica, Arial, sans-serif !important;
+    }
     
+    /* 莫蘭迪背景與文字顏色 */
     html, body, [class*="css"], [data-testid="stAppViewContainer"], .stApp {
-        font-family: 'Noto Serif TC', 'Songti TC', 'PMingLiU', 'MingLiU', 'SimSun', serif !important;
-        background-color: #F5F4F1 !important; 
+        background-color: #F6F5F2 !important; 
         color: #5C5E5D !important; 
     }
     
+    /* 標題設計 (乾淨俐落) */
     h1, h2, h3 { 
-        color: #4A4C4B !important; 
-        border-bottom: 1px solid #D6D4CE; 
-        padding-bottom: 5px;
-        font-weight: 700;
+        color: #3B4441 !important; 
+        border-bottom: 2px solid #D6D4CE; 
+        padding-bottom: 8px; 
+        font-weight: bold;
     }
-    
+
+    /* 側邊欄 */
     section[data-testid="stSidebar"] { 
-        background-color: #EAE8E3 !important;
+        background-color: #EAE8E3 !important; 
         border-right: 1px solid #D6D4CE !important; 
     }
-    
+
+    /* 表單區塊設計 */
     [data-testid="stForm"] {
         border: 1px solid #D6D4CE !important;
-        background-color: #FDFDFD !important;
-        border-radius: 4px;
-        padding: 20px;
+        background-color: #FFFFFF !important;
+        border-radius: 8px;
+        padding: 24px;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.03);
     }
-    
-    /* 一般按鈕 (鼠尾草綠) */
+
+    /* 一般按鈕 (經典鼠尾草綠) */
     .stButton > button, [data-testid="stFormSubmitButton"] > button { 
         background-color: #8A9A92 !important;
         color: #FFFFFF !important; 
         border: none !important;
-        border-radius: 4px !important; 
+        border-radius: 6px !important; 
         width: 100%; 
+        font-size: 16px !important;
+        font-weight: bold !important; 
         transition: 0.3s;
     }
     .stButton > button:hover, [data-testid="stFormSubmitButton"] > button:hover {
         background-color: #72827A !important;
+        transform: translateY(-1px);
     }
 
     /* 重新整理與儲存按鈕 (淡雅灰) */
@@ -65,19 +75,82 @@ st.markdown("""
     .btn-secondary > button:hover {
         background-color: #A8A7A0 !important;
     }
-    
-    .stTable { font-size: 14px; }
+
+    /* 表格設計 */
+    .stTable { font-size: 15px; }
     th {
-        background-color: #E3E1DB !important;
+        background-color: #E6E4DF !important; 
         color: #4A4C4B !important;
         border-bottom: 2px solid #C0BFB8 !important;
+        font-weight: bold !important;
     }
-    td { border-bottom: 1px solid #EAE8E3 !important; }
+    td { border-bottom: 1px solid #F6F5F2 !important; }
     th, td {
         white-space: pre-wrap !important; 
-        vertical-align: top !important;
-        line-height: 1.8 !important;
+        vertical-align: middle !important;
+        line-height: 1.6 !important;
         text-align: left !important;
+        padding: 10px 12px !important;
+    }
+
+    /* ======= 檔案上傳區塊：極簡化 ======= */
+    [data-testid="stFileUploadDropzone"] {
+        background-color: #FFFFFF !important;
+        border: 1px dashed #C0BFB8 !important;
+        border-radius: 8px !important;
+        padding: 20px 10px !important;
+        width: 100% !important; /* 確保不超出 column */
+        box-sizing: border-box !important;
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: center !important;
+        justify-content: center !important;
+    }
+
+    /* 1. 隱藏預設的雲朵圖示 (消滅醜物) */
+    [data-testid="stFileUploadDropzone"] svg {
+        display: none !important;
+    }
+
+    /* 2. 隱藏預設的英文字 */
+    [data-testid="stFileUploadDropzone"] > div:first-child * {
+        font-size: 0px !important;
+        color: transparent !important;
+        margin: 0 !important;
+    }
+
+    /* 3. 注入純淨的中文說明 */
+    [data-testid="stFileUploadDropzone"] > div:first-child::after {
+        content: "拖曳檔案至此";
+        display: block;
+        color: #5C5E5D !important;
+        font-size: 14px !important;
+        margin-bottom: 12px;
+        text-align: center;
+    }
+
+    /* 4. 修改 Browse files 按鈕 */
+    [data-testid="stFileUploadDropzone"] button {
+        position: relative !important;
+        width: 120px !important;
+        border: none !important;
+        background: transparent !important;
+        margin: 0 auto !important;
+    }
+    [data-testid="stFileUploadDropzone"] button * { display: none !important; }
+    [data-testid="stFileUploadDropzone"] button::before {
+        content: "選擇檔案";
+        display: flex; align-items: center; justify-content: center;
+        background-color: #EAE8E3 !important;
+        color: #4A4C4B !important;
+        font-size: 13px;
+        padding: 6px 0;
+        border-radius: 4px;
+        border: 1px solid #D6D4CE !important;
+        transition: 0.2s;
+    }
+    [data-testid="stFileUploadDropzone"] button:hover::before {
+        background-color: #D6D4CE !important;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -97,10 +170,11 @@ def smart_read_sheet(file):
                     break
             df_temp = pd.read_excel(file, sheet_name=target_sheet, header=None)
         
+        # 精準定位標題列
         header_idx = 0
         for i in range(min(len(df_temp), 15)):
             row_str = "".join([str(x).replace(" ", "") for x in df_temp.iloc[i].values])
-            if "姓名" in row_str or "科別" in row_str or "日期" in row_str:
+            if "姓名" in row_str or "科別" in row_str or "日期" in row_str or "開始" in row_str:
                 header_idx = i
                 break
         
@@ -109,6 +183,7 @@ def smart_read_sheet(file):
         else:
             df = pd.read_excel(file, sheet_name=target_sheet, header=header_idx)
         
+        # 嚴謹的欄位重新命名（避免「備選科別」導致欄位名稱重複衝突）
         cols = []
         for c in df.columns:
             c_str = str(c).strip().replace('\n', '').replace(' ', '')
@@ -116,14 +191,15 @@ def smart_read_sheet(file):
                 cols.append("姓名")
             elif "期間" in c_str:
                 cols.append("實習期間")
-            elif "科別" in c_str or "科" in c_str:
-                cols.append("科別")
+            elif ("科別" in c_str or "科" in c_str) and "科別" not in cols:
+                cols.append("科別") # 只把第一個符合的當作主要科別，避開備選科別
             else:
                 cols.append(c_str)
         df.columns = cols
         
-        start_col = next((c for c in df.columns if "開始" in str(c) and "日期" in str(c)), None)
-        end_col = next((c for c in df.columns if "結束" in str(c) and "日期" in str(c)), None)
+        # 更強大的開始與結束抓取邏輯 (不需要"日期"兩個字也能抓到)
+        start_col = next((c for c in df.columns if "開始" in str(c)), None)
+        end_col = next((c for c in df.columns if "結束" in str(c)), None)
         
         if start_col and end_col and "實習期間" not in df.columns:
             def safe_format(val):
@@ -213,14 +289,27 @@ if mode == "醫院代表":
         total_min_workdays = st.session_state.min_weeks_req * 5
         
         try:
-            # 讀取容額表 (因醫學系格式，跳過前四列複雜標頭)
+            # 智慧讀取容額表 (自動定位「科別」與「時段」所在的標題列)
             if q_file.name.endswith('.csv'):
-                df_q = pd.read_csv(q_file, header=4)
+                df_q_temp = pd.read_csv(q_file, header=None)
             else:
                 xls_q = pd.ExcelFile(q_file)
                 try: sn_q = [s for s in xls_q.sheet_names if "容額" in s or "時段" in s][0]
                 except: sn_q = xls_q.sheet_names[0]
-                df_q = pd.read_excel(q_file, sheet_name=sn_q, header=4)
+                df_q_temp = pd.read_excel(q_file, sheet_name=sn_q, header=None)
+            
+            header_q_idx = 0
+            for i in range(min(len(df_q_temp), 15)):
+                row_str = "".join([str(x).replace(" ", "") for x in df_q_temp.iloc[i].values])
+                if "科別" in row_str and ("時段" in row_str or "時間" in row_str or "/" in row_str):
+                    header_q_idx = i
+                    break
+
+            if q_file.name.endswith('.csv'):
+                df_q = pd.read_csv(q_file, header=header_q_idx)
+            else:
+                df_q = pd.read_excel(q_file, sheet_name=sn_q, header=header_q_idx)
+            
             df_q.columns = [str(c).strip() for c in df_q.columns]
 
             # 讀取申請表
