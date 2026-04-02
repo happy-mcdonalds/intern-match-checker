@@ -192,11 +192,11 @@ if mode == "醫院代表":
     col_q, col_a = st.columns(2)
     with col_q:
         q_file = st.file_uploader("上傳醫院容額表", type=['xlsx'])
-        st.caption("💡 請上傳『醫院空白表格』的檔案，請確保檔案中只有這個分頁")
+        st.caption("請上傳「醫院空白表格」的檔案，請確保檔案中只有這個分頁")
         
     with col_a:
         a_file = st.file_uploader("上傳學生志願表", type=['xlsx'])
-        st.caption("💡 請上傳『志願申請名單(先寫這個寄給對方)』的檔案，請確保檔案中只有這個分頁")
+        st.caption("請上傳「志願申請名單(先寫這個寄給對方)」的檔案，請確保檔案中只有這個分頁")
     
     st.markdown("<br>", unsafe_allow_html=True)
     if st.button("確認並開始比對"):
@@ -252,10 +252,10 @@ if mode == "醫院代表":
 
                 st.header("分析結果")
                 if collisions:
-                    st.subheader("⚠️ 名額撞期名單")
+                    st.subheader("撞期名單")
                     st.dataframe(pd.DataFrame(collisions), use_container_width=True)
                 if invalid:
-                    st.subheader("📝 規章不符名單")
+                    st.subheader("不符合實習規定")
                     st.dataframe(pd.DataFrame(invalid).drop_duplicates(), use_container_width=True)
                 if not collisions and not invalid: st.success("核對完成，查無異常。")
             else: st.error("讀取失敗：請確保容額表有「科別」，學生表有「姓名」。")
@@ -265,7 +265,7 @@ elif mode == "系秘":
     
     # 檔案上傳區塊 (新增防呆提示)
     m_files = st.file_uploader("上傳各院清單 (可多選)", type=['xlsx'], accept_multiple_files=True)
-    st.caption("💡 請上傳『確定實習名單(確定好名單寫此表單)』的檔案，請確保檔案中只有這個分頁")
+    st.caption("請上傳「確定實習名單(確定好名單寫此表單)」的檔案，請確保檔案中只有這個分頁")
     st.markdown("<br>", unsafe_allow_html=True)
     
     if st.button("確認並開始比對") and m_files:
@@ -296,7 +296,7 @@ elif mode == "系秘":
                     conflicts.append({"姓名": name, "衝突詳情": details})
             
             if conflicts:
-                st.subheader("⚠️ 偵測到重疊佔位")
+                st.subheader("重複申請名單")
                 html_table = "<table class='html-table'><tr><th>姓名</th><th>衝突詳情</th></tr>"
                 for c in conflicts:
                     html_table += f"<tr><td>{c['姓名']}</td><td>{c['衝突詳情']}</td></tr>"
