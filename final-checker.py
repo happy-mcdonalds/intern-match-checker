@@ -11,7 +11,7 @@ if "require_cont" not in st.session_state: st.session_state.require_cont = True
 # 頁面基本設定
 st.set_page_config(page_title="醫學系實習選配管理系統", layout="wide")
 
-# --- 2. 極簡莫蘭迪 CSS (修復 UI 跑版與 Icon) ---
+# --- 2. 極簡莫蘭迪 CSS ---
 st.markdown("""
     <style>
     .stApp { background-color: #F5F4F1; }
@@ -42,7 +42,7 @@ st.markdown("""
 
 # --- 3. 核心工具函式 ---
 
-# 【保留不變】醫院代表專用讀取引擎
+# 【醫院代表專用讀取引擎】
 def smart_read_sheet(file, sheet_hints):
     try:
         xls = pd.ExcelFile(file)
@@ -87,19 +87,17 @@ def smart_read_sheet(file, sheet_hints):
     except Exception as e:
         return None
 
-# 【全新打造】系秘專用讀取引擎 (針對北榮/國泰確定名單)
+# 【系秘專用讀取引擎】
 def secretary_read_sheet(file):
     try:
         xls = pd.ExcelFile(file)
         
-        # 1. 強制尋找「確定」或「正式」分頁
         target_sheet = xls.sheet_names[0]
         for sn in xls.sheet_names:
             if "確定" in sn or "正式" in sn:
                 target_sheet = sn
                 break
         
-        # 2. 精準掃描標題列
         df_raw = pd.read_excel(file, sheet_name=target_sheet, header=None, nrows=20)
         h_idx = 0
         for i, row in df_raw.iterrows():
@@ -112,7 +110,6 @@ def secretary_read_sheet(file):
         df = df.loc[:, ~df.columns.duplicated()].copy() 
         df.columns = [str(c).strip().replace('\n', '') for c in df.columns]
         
-        # 3. 欄位精準定位
         name_col = next((c for c in df.columns if "姓名" in c), None)
         start_col = next((c for c in df.columns if "開始" in c), None)
         end_col = next((c for c in df.columns if "結束" in c), None)
@@ -120,15 +117,12 @@ def secretary_read_sheet(file):
         
         if not name_col: return None
         
-        # 4. 姓名整理與防呆 (向下填補)
         df = df.rename(columns={name_col: "姓名"})
         df["姓名"] = df["姓名"].ffill()
         df = df[df["姓名"].notna()]
         
-        # 5. 過濾甄漂亮範例
         df = df[~df["姓名"].astype(str).str.contains("甄漂亮|範例|例|說明|空白", na=False)]
         
-        # 6. 日期安全合併
         if start_col and end_col:
             df["日期欄位"] = df[start_col].astype(str) + " - " + df[end_col].astype(str)
         elif period_col:
@@ -193,13 +187,20 @@ if mode == "醫院代表":
             st.success("規則已儲存")
 
     st.divider()
-    col_q, col_a = st.columns(2)
-    q_file = col_q.file_uploader("上傳醫院容額表", type=['xlsx'])
-    a_file = col_a.file_uploader("上傳學生志願表 (申請名單)", type=['xlsx'])
     
+    # 檔案上傳區塊 (新增防呆提示)
+    col_q, col_a = st.columns(2)
+    with col_q:
+        q_file = st.file_uploader("上傳醫院容額表", type=['xlsx'])
+        st.caption("💡 請上傳『醫院空白表格』的檔案，請確保檔案中只有這個分頁")
+        
+    with col_a:
+        a_file = st.file_uploader("上傳學生志願表", type=['xlsx'])
+        st.caption("💡 請上傳『志願申請名單(先寫這個寄給對方)』的檔案，請確保檔案中只有這個分頁")
+    
+    st.markdown("<br>", unsafe_allow_html=True)
     if st.button("確認並開始比對"):
         if q_file and a_file:
-            # 醫院代表維持使用舊版引擎，保持完美運作
             df_q = smart_read_sheet(q_file, ["容額", "時段", "空白"])
             df_a = smart_read_sheet(a_file, ["志願", "申請"])
             
@@ -251,21 +252,25 @@ if mode == "醫院代表":
 
                 st.header("分析結果")
                 if collisions:
-                    st.subheader("撞期名單")
+                    st.subheader("⚠️ 名額撞期名單")
                     st.dataframe(pd.DataFrame(collisions), use_container_width=True)
                 if invalid:
-                    st.subheader("不符合實習規定")
+                    st.subheader("📝 規章不符名單")
                     st.dataframe(pd.DataFrame(invalid).drop_duplicates(), use_container_width=True)
                 if not collisions and not invalid: st.success("核對完成，查無異常。")
             else: st.error("讀取失敗：請確保容額表有「科別」，學生表有「姓名」。")
 
 elif mode == "系秘":
     st.title("跨院重複佔位檢查")
-    m_files = st.file_uploader("上傳各院清單 (確定名單格式)", type=['xlsx'], accept_multiple_files=True)
+    
+    # 檔案上傳區塊 (新增防呆提示)
+    m_files = st.file_uploader("上傳各院清單 (可多選)", type=['xlsx'], accept_multiple_files=True)
+    st.caption("💡 請上傳『確定實習名單(確定好名單寫此表單)』的檔案，請確保檔案中只有這個分頁")
+    st.markdown("<br>", unsafe_allow_html=True)
+    
     if st.button("確認並開始比對") and m_files:
         all_d = []
         for f in m_files:
-            # 系秘全面改用專屬引擎 secretary_read_sheet
             df = secretary_read_sheet(f)
             if df is not None and '姓名' in df.columns and '日期欄位' in df.columns:
                 df['來源'] = f.name.replace('.xlsx', '')
@@ -291,7 +296,7 @@ elif mode == "系秘":
                     conflicts.append({"姓名": name, "衝突詳情": details})
             
             if conflicts:
-                st.subheader("偵測到重疊佔位")
+                st.subheader("⚠️ 偵測到重疊佔位")
                 html_table = "<table class='html-table'><tr><th>姓名</th><th>衝突詳情</th></tr>"
                 for c in conflicts:
                     html_table += f"<tr><td>{c['姓名']}</td><td>{c['衝突詳情']}</td></tr>"
