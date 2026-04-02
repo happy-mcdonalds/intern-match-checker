@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime, timedelta
+from datetime import datetime
 import re
 
 # --- 初始化系統記憶 ---
@@ -14,184 +14,111 @@ if "require_cont" not in st.session_state:
 # 頁面基本設定
 st.set_page_config(page_title="醫學系實習選配管理系統", layout="wide")
 
-# --- CSS 視覺設定：黑體 + 莫蘭迪色 + 溫和中文化上傳框 ---
+# --- CSS 視覺設定 (移除所有上傳框魔改，回歸原生穩定版) ---
 st.markdown("""
     <style>
-    /* 全局無襯線黑體 */
-    * {
-        font-family: "PingFang TC", "微軟正黑體", "Helvetica Neue", Helvetica, Arial, sans-serif !important;
-    }
+    * { font-family: "PingFang TC", "微軟正黑體", sans-serif !important; }
+    html, body, .stApp { background-color: #F6F5F2 !important; color: #5C5E5D !important; }
+    h1, h2, h3 { color: #3B4441 !important; border-bottom: 2px solid #D6D4CE; padding-bottom: 8px; font-weight: bold; }
     
-    /* 莫蘭迪背景與文字顏色 */
-    html, body, [class*="css"], [data-testid="stAppViewContainer"], .stApp {
-        background-color: #F6F5F2 !important; 
-        color: #5C5E5D !important; 
-    }
-    
-    /* 標題設計 */
-    h1, h2, h3 { 
-        color: #3B4441 !important; 
-        border-bottom: 2px solid #D6D4CE; 
-        padding-bottom: 8px; 
-        font-weight: bold;
-    }
-
-    /* 側邊欄 */
-    section[data-testid="stSidebar"] { 
-        background-color: #EAE8E3 !important; 
-        border-right: 1px solid #D6D4CE !important; 
-    }
-
-    /* 表單區塊設計 */
     [data-testid="stForm"] {
-        border: 1px solid #D6D4CE !important;
-        background-color: #FFFFFF !important;
-        border-radius: 8px;
-        padding: 24px;
-        box-shadow: 0 2px 6px rgba(0,0,0,0.03);
+        border: 1px solid #D6D4CE !important; background-color: #FFFFFF !important;
+        border-radius: 8px; padding: 24px; box-shadow: 0 2px 6px rgba(0,0,0,0.03);
     }
-
-    /* 一般按鈕 (經典鼠尾草綠) */
+    
+    /* 按鈕顏色統一 */
     .stButton > button, [data-testid="stFormSubmitButton"] > button { 
-        background-color: #8A9A92 !important;
-        color: #FFFFFF !important; 
-        border: none !important;
-        border-radius: 6px !important; 
-        width: 100%; 
-        font-size: 16px !important;
-        font-weight: bold !important; 
-        transition: 0.3s;
+        background-color: #8A9A92 !important; color: #FFFFFF !important; 
+        border: none !important; border-radius: 6px !important; width: 100%; 
+        font-size: 16px !important; font-weight: bold !important; transition: 0.3s;
     }
     .stButton > button:hover, [data-testid="stFormSubmitButton"] > button:hover {
-        background-color: #72827A !important;
-        transform: translateY(-1px);
+        background-color: #72827A !important; transform: translateY(-1px);
     }
-
-    /* 重新整理與儲存按鈕 (淡雅灰) */
-    .btn-secondary > button {
-        background-color: #C0BFB8 !important;
-        color: #FFFFFF !important;
-    }
-    .btn-secondary > button:hover {
-        background-color: #A8A7A0 !important;
-    }
+    .btn-secondary > button { background-color: #C0BFB8 !important; color: #FFFFFF !important; }
+    .btn-secondary > button:hover { background-color: #A8A7A0 !important; }
 
     /* 表格設計 */
-    .stTable { font-size: 15px; }
-    th {
-        background-color: #E6E4DF !important; 
-        color: #4A4C4B !important;
-        border-bottom: 2px solid #C0BFB8 !important;
-        font-weight: bold !important;
-    }
-    td { border-bottom: 1px solid #F6F5F2 !important; }
-    th, td {
-        white-space: pre-wrap !important; 
-        vertical-align: middle !important;
-        line-height: 1.6 !important;
-        text-align: left !important;
-        padding: 10px 12px !important;
-    }
-
-    /* ======= 檔案上傳區塊：不撐爆版面的極簡中文版 ======= */
-    [data-testid="stFileUploadDropzone"] {
-        background-color: #FFFFFF !important;
-        border: 1px dashed #C0BFB8 !important;
-        border-radius: 8px !important;
-        transition: 0.3s;
-    }
-    [data-testid="stFileUploadDropzone"]:hover {
-        border-color: #8A9A92 !important;
-        background-color: #FBFBFA !important;
-    }
-
-    /* 隱藏醜圖示 */
-    [data-testid="stFileUploadDropzone"] svg {
-        display: none !important;
-    }
-
-    /* 隱藏預設的英文文字與預設按鈕 (避免影響排版) */
-    [data-testid="stFileUploadDropzone"] > div > div > span,
-    [data-testid="stFileUploadDropzone"] > div > div > small,
-    [data-testid="stFileUploadDropzone"] button {
-        display: none !important;
-    }
-
-    /* 安全地注入中文說明，不影響外部寬度 */
-    [data-testid="stFileUploadDropzone"] > div > div::before {
-        content: "拖曳檔案至此\\A或點擊選擇檔案";
-        white-space: pre;
-        display: block;
-        color: #5C5E5D !important;
-        font-size: 15px !important;
-        font-weight: bold;
-        text-align: center;
-        line-height: 1.8;
-        padding: 30px 0; /* 給予適當的高度留白 */
-    }
+    th { background-color: #E6E4DF !important; color: #4A4C4B !important; font-weight: bold !important; }
+    td, th { padding: 10px 12px !important; line-height: 1.5 !important; }
     </style>
-    """, unsafe_allow_html=True)
+""", unsafe_allow_html=True)
 
-# --- 核心工具函式 ---
-def smart_read_sheet(file):
+# --- 核心工具函式 (全新升級：避開空白範本、自動填補姓名) ---
+def read_excel_or_csv(file, mode="app"):
     try:
-        file.seek(0) # 關鍵修復：將檔案指標歸零
+        # 讀取檔案內所有的 sheet
         if file.name.endswith('.csv'):
-            df_temp = pd.read_csv(file, header=None)
-            target_sheet = None
+            df_dict = {"sheet1": pd.read_csv(file, header=None)}
         else:
-            xls = pd.ExcelFile(file)
-            target_sheet = xls.sheet_names[0]
-            for sn in xls.sheet_names:
-                if any(k in sn for k in ["志願", "名單", "工作表4", "實習容額", "申請"]):
-                    target_sheet = sn
-                    break
-            df_temp = pd.read_excel(file, sheet_name=target_sheet, header=None)
+            df_dict = pd.read_excel(file, sheet_name=None, header=None)
+            
+        target_df = None
         
-        # 精準定位標題列
-        header_idx = 0
-        for i in range(min(len(df_temp), 15)):
-            row_str = "".join([str(x).replace(" ", "") for x in df_temp.iloc[i].values])
-            if "姓名" in row_str or "科別" in row_str or "日期" in row_str or "開始" in row_str:
-                header_idx = i
+        # 1. 篩選分頁：避開空白範本
+        for sheet_name, df_temp in df_dict.items():
+            if "確定" in sheet_name or "規範" in sheet_name or "基本資料" in sheet_name:
+                continue # 絕對跳過這些已知無用的表單
+            
+            # 檢查內容是否符合特徵
+            sample_text = df_temp.iloc[:15].astype(str).sum().sum()
+            if mode == "app" and "姓名" in sample_text and ("科別" in sample_text or "志願" in sample_text):
+                target_df = df_temp
                 break
+            elif mode == "cap" and "科別" in sample_text and ("時段" in sample_text or "/" in sample_text):
+                target_df = df_temp
+                break
+                    
+        # 如果沒找到特徵，就拿第一張不是「確定」的表
+        if target_df is None:
+            for sheet_name, df_temp in df_dict.items():
+                if "確定" not in sheet_name:
+                    target_df = df_temp
+                    break
+
+        if target_df is None: return None
+
+        # 2. 定位真正的標題列在哪裡
+        header_idx = 0
+        for i in range(min(len(target_df), 15)):
+            row_str = "".join([str(x).replace(" ", "") for x in target_df.iloc[i].values])
+            if mode == "app" and "姓名" in row_str: 
+                header_idx = i; break
+            elif mode == "cap" and "科別" in row_str: 
+                header_idx = i; break
+                
+        # 3. 整理 DataFrame
+        df = target_df.iloc[header_idx:].reset_index(drop=True)
+        # 統一去掉欄位名稱的換行跟空白
+        df.columns = [str(c).strip().replace('\n', '').replace(' ', '') for c in df.iloc[0]]
+        df = df[1:].reset_index(drop=True)
+        df = df.dropna(how='all') # 清除全空的列
         
-        file.seek(0) # 關鍵修復：把檔案指標「倒轉」回最前面，否則第二次會讀到空檔案
-        
-        if file.name.endswith('.csv'):
-            df = pd.read_csv(file, header=header_idx)
-        else:
-            df = pd.read_excel(file, sheet_name=target_sheet, header=header_idx)
-        
-        # 嚴謹的欄位重新命名
-        cols = []
-        for c in df.columns:
-            c_str = str(c).strip().replace('\n', '').replace(' ', '')
-            if "姓名" in c_str:
-                cols.append("姓名")
-            elif "期間" in c_str:
-                cols.append("實習期間")
-            elif ("科別" in c_str or "科" in c_str) and "科別" not in cols:
-                cols.append("科別") 
-            else:
-                cols.append(c_str)
-        df.columns = cols
-        
-        start_col = next((c for c in df.columns if "開始" in str(c)), None)
-        end_col = next((c for c in df.columns if "結束" in str(c)), None)
-        
-        if start_col and end_col and "實習期間" not in df.columns:
-            def safe_format(val):
-                if pd.isna(val) or str(val).strip() == '' or str(val).lower() == 'nan': return ""
-                try: return pd.to_datetime(val).strftime('%Y/%m/%d')
-                except: return str(val).replace('-', '/')
-            df["實習期間"] = df.apply(
-                lambda row: f"{safe_format(row[start_col])} ~ {safe_format(row[end_col])}" 
-                if safe_format(row[start_col]) and safe_format(row[end_col]) else None, 
-                axis=1
-            )
+        # 4. 欄位正規化與姓名補齊
+        if mode == "app":
+            # 統一實習期間
+            period_col = next((c for c in df.columns if "期間" in c), None)
+            start_col = next((c for c in df.columns if "開始" in c), None)
+            end_col = next((c for c in df.columns if "結束" in c), None)
+            if period_col:
+                df.rename(columns={period_col: "實習期間"}, inplace=True)
+            elif start_col and end_col:
+                df["實習期間"] = df[start_col].astype(str) + "-" + df[end_col].astype(str)
+            
+            # 統一科別名稱
+            dept_col = next((c for c in df.columns if "申請科" in c), None) or next((c for c in df.columns if "科別" in c), None)
+            if dept_col:
+                df.rename(columns={dept_col: "科別"}, inplace=True)
+                
+            # 填補合併儲存格造成的姓名空白
+            name_col = next((c for c in df.columns if "姓名" in c), None)
+            if name_col:
+                df.rename(columns={name_col: "姓名"}, inplace=True)
+                df['姓名'] = df['姓名'].replace('nan', pd.NA).ffill()
+                df = df.dropna(subset=['姓名']) # 把真的沒有姓名的列清掉
+                
         return df
-    except Exception as e: 
+    except Exception as e:
         return None
 
 def extract_dates_universal(text, year=2026):
@@ -215,9 +142,7 @@ def extract_dates_universal(text, year=2026):
 def parse_period_dates(p_str):
     try:
         s, e = extract_dates_universal(p_str)
-        if s and e:
-            workdays = len(pd.bdate_range(s, e))
-            return s, e, workdays
+        if s and e: return s, e, len(pd.bdate_range(s, e))
     except: pass
     return None, None, 0
 
@@ -243,7 +168,6 @@ if mode == "醫院代表":
         st.markdown('<div class="btn-secondary">', unsafe_allow_html=True)
         save_btn = st.form_submit_button("儲存條件")
         st.markdown('</div>', unsafe_allow_html=True)
-        
         if save_btn:
             st.session_state.course_dur_weeks = cd_val
             st.session_state.min_weeks_req = mw_val
@@ -251,7 +175,6 @@ if mode == "醫院代表":
             st.success("條件已儲存！請接續上傳檔案。")
 
     st.divider()
-    
     st.markdown("### 檔案上傳與比對")
     c1, c2 = st.columns(2)
     with c1: 
@@ -268,47 +191,21 @@ if mode == "醫院代表":
         total_min_workdays = st.session_state.min_weeks_req * 5
         
         try:
-            q_file.seek(0) # 關鍵修復
-            if q_file.name.endswith('.csv'):
-                df_q_temp = pd.read_csv(q_file, header=None)
-            else:
-                xls_q = pd.ExcelFile(q_file)
-                try: sn_q = [s for s in xls_q.sheet_names if "容額" in s or "時段" in s][0]
-                except: sn_q = xls_q.sheet_names[0]
-                df_q_temp = pd.read_excel(q_file, sheet_name=sn_q, header=None)
-            
-            header_q_idx = 0
-            for i in range(min(len(df_q_temp), 15)):
-                row_str = "".join([str(x).replace(" ", "") for x in df_q_temp.iloc[i].values])
-                if "科別" in row_str and ("時段" in row_str or "時間" in row_str or "/" in row_str):
-                    header_q_idx = i
-                    break
-
-            q_file.seek(0) # 關鍵修復
-            
-            if q_file.name.endswith('.csv'):
-                df_q = pd.read_csv(q_file, header=header_q_idx)
-            else:
-                df_q = pd.read_excel(q_file, sheet_name=sn_q, header=header_q_idx)
-            
-            df_q.columns = [str(c).strip() for c in df_q.columns]
-
-            # 讀取申請表 (內部已加入 file.seek(0) 解決讀不到的問題)
-            df_a = smart_read_sheet(a_file)
+            # 完美讀取資料，不再受到空白 sheet 影響
+            df_q = read_excel_or_csv(q_file, mode="cap")
+            df_a = read_excel_or_csv(a_file, mode="app")
 
             if df_q is not None and df_a is not None:
-                if '姓名' in df_a.columns: df_a['姓名'] = df_a['姓名'].ffill()
-                
                 apps = []
-                dept_col = "科別" if "科別" in df_a.columns else "申請科別"
                 for _, row in df_a.iterrows():
-                    if pd.notna(row.get(dept_col)) and pd.notna(row.get('實習期間')):
-                        s, e, d = parse_period_dates(row['實習期間'])
-                        if s: apps.append({'姓名': row['姓名'], '科別': str(row[dept_col]).strip(), '開始': s, '結束': e, '天數': d})
+                    dept = str(row.get('科別', '')).strip()
+                    period = str(row.get('實習期間', '')).strip()
+                    if dept and dept != 'nan' and period and period != 'nan':
+                        s, e, d = parse_period_dates(period)
+                        if s: apps.append({'姓名': row['姓名'], '科別': dept, '開始': s, '結束': e, '天數': d})
                 
                 date_cols = []
                 slot_mapping = {}
-        
                 for c in df_q.columns:
                     s_slot, e_slot = extract_dates_universal(c)
                     if s_slot and e_slot:
@@ -327,7 +224,6 @@ if mode == "醫院代表":
                         
                         s_slot, e_slot = slot_mapping[col]
                         st_in_slot = []
-    
                         for a in apps:
                             if a['科別'] == dept:
                                 if a['開始'] <= e_slot and a['結束'] >= s_slot:
@@ -342,7 +238,6 @@ if mode == "醫院代表":
                             })
 
                 invalid = []
-          
                 if apps:
                     df_temp = pd.DataFrame(apps)
                     for name, group in df_temp.groupby('姓名'):
@@ -366,21 +261,21 @@ if mode == "醫院代表":
                     
                 st.header("異常監控結果")
                 if collisions:
-                    st.subheader("名額撞期名單")
+                    st.subheader("⚠️ 名額撞期名單")
                     st.table(pd.DataFrame(collisions))
-          
                 if invalid:
-                    st.subheader("規章不符名單")
+                    st.subheader("⚠️ 規章不符名單")
                     st.table(pd.DataFrame(invalid).drop_duplicates())
                 if not collisions and not invalid:
-                    st.success("名額分配與規章核對完全符合規定。")
+                    st.success("🎉 太棒了！名額分配與規章核對完全符合規定。")
+            else:
+                st.error("讀取檔案失敗，請確認檔案格式是否正確。")
         except Exception as e: 
-            st.error(f"解析失敗：{e}")
+            st.error(f"解析過程中發生錯誤：{e}")
 
 # --- 模式：系秘 ---
 elif mode == "系秘":
     st.title("跨院重複佔位檢查")
-    
     st.markdown("### 檔案上傳")
     multi_files = st.file_uploader("上傳各院志願清單 (可多選)", type=['xlsx', 'csv'], accept_multiple_files=True)
     run_check_sec = st.button("確認並開始比對")
@@ -388,9 +283,8 @@ elif mode == "系秘":
     if run_check_sec and multi_files:
         all_data = []
         for f in multi_files:
-            df = smart_read_sheet(f)
+            df = read_excel_or_csv(f, mode="app")
             if df is not None and '姓名' in df.columns and '實習期間' in df.columns:
-                df['姓名'] = df['姓名'].ffill()
                 clean_hosp_name = f.name.replace('.xlsx', '').replace('.csv', '')
                 df['來源醫院'] = clean_hosp_name
                 all_data.append(df[df['實習期間'].notna()])
@@ -403,12 +297,10 @@ elif mode == "系秘":
                 s_apps = full_df[full_df['姓名'] == name].to_dict('records')
                 if len(s_apps) > 1:
                     conflict_set = set()
-                    
                     for i in range(len(s_apps)):
                         for j in range(i + 1, len(s_apps)):
                             d1_s, d1_e, _ = parse_period_dates(s_apps[i]['實習期間'])
                             d2_s, d2_e, _ = parse_period_dates(s_apps[j]['實習期間'])
-                            
                             if d1_s and d2_s and (d1_s <= d2_e and d2_s <= d1_e):
                                 conflict_set.add(i)
                                 conflict_set.add(j)
@@ -420,14 +312,10 @@ elif mode == "系秘":
                             period = str(s_apps[idx]['實習期間']).replace('\n', '')
                             details.append(f"- {hosp} ({period})")
                         
-                        conflicts.append({
-                            "姓名": name,
-                            "衝突詳情": "\n".join(details)
-                        })
+                        conflicts.append({"姓名": name, "衝突詳情": "\n".join(details)})
                         
             if conflicts:
-                st.subheader("偵測到跨院衝突名單")
-                df_conflicts = pd.DataFrame(conflicts)
-                st.table(df_conflicts.set_index('姓名'))
+                st.subheader("⚠️ 偵測到跨院衝突名單")
+                st.table(pd.DataFrame(conflicts).set_index('姓名'))
             else: 
-                st.success("無重複佔位情況。")
+                st.success("🎉 無任何重複佔位情況。")
