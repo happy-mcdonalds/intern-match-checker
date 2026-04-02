@@ -187,7 +187,7 @@ if st.sidebar.button("重新整理系統"):
     st.rerun()
 
 if mode == "醫院代表":
-    st.title("醫院內部容額與規章審核")
+    st.title("醫院容額與實習規則")
     
     with st.form("settings_form"):
         st.markdown("### 規則設定")
@@ -206,11 +206,11 @@ if mode == "醫院代表":
     col_q, col_a = st.columns(2)
     with col_q:
         q_file = st.file_uploader("上傳醫院容額表", type=['xlsx'])
-        st.caption("💡 請上傳『醫院空白表格』，請確保檔案中只有這個分頁")
+        st.caption("請上傳「醫院空白表格」，並確保檔案中只有這個分頁")
         
     with col_a:
         a_file = st.file_uploader("上傳學生志願表", type=['xlsx'])
-        st.caption("💡 請上傳『志願申請名單(先寫這個寄給對方)』，請確保檔案中只有這個分頁")
+        st.caption("請上傳「志願申請名單(先寫這個寄給對方)」，並確保檔案中只有這個分頁")
     
     st.markdown("<br>", unsafe_allow_html=True)
     if st.button("確認並開始比對"):
@@ -279,19 +279,19 @@ if mode == "醫院代表":
         inv_data = st.session_state.rep_inv_data
         
         if col_data:
-            st.subheader("⚠️ 名額撞期名單")
+            st.subheader("撞期名單")
             df_col = pd.DataFrame(col_data)
             st.dataframe(df_col, use_container_width=True)
             # 轉換為含 BOM 的 UTF-8 確保 Excel 開啟中文不亂碼
             csv_col = df_col.to_csv(index=False).encode('utf-8-sig')
-            st.download_button(label="📥 下載撞期名單 (CSV)", data=csv_col, file_name="名額撞期名單.csv", mime="text/csv")
+            st.download_button(label="下載撞期名單 (CSV)", data=csv_col, file_name="名額撞期名單.csv", mime="text/csv")
         
         if inv_data:
-            st.subheader("📝 規章不符名單")
+            st.subheader("不符合實習規定名單")
             df_inv = pd.DataFrame(inv_data).drop_duplicates()
             st.dataframe(df_inv, use_container_width=True)
             csv_inv = df_inv.to_csv(index=False).encode('utf-8-sig')
-            st.download_button(label="📥 下載規章不符名單 (CSV)", data=csv_inv, file_name="規章不符名單.csv", mime="text/csv")
+            st.download_button(label="下載規章不符名單 (CSV)", data=csv_inv, file_name="規章不符名單.csv", mime="text/csv")
             
         if not col_data and not inv_data: 
             st.success("核對完成，查無異常。")
@@ -300,7 +300,7 @@ elif mode == "系秘":
     st.title("跨院重複佔位檢查")
     
     m_files = st.file_uploader("上傳各院清單 (可多選)", type=['xlsx'], accept_multiple_files=True)
-    st.caption("💡 請上傳『確定實習名單(確定好名單寫此表單)』的檔案，請確保檔案中只有這個分頁")
+    st.caption("請上傳「確定實習名單(確定好名單寫此表單)」的檔案，並確保檔案中只有這個分頁")
     st.markdown("<br>", unsafe_allow_html=True)
     
     if st.button("確認並開始比對") and m_files:
@@ -341,7 +341,7 @@ elif mode == "系秘":
     if st.session_state.sec_run:
         conflicts = st.session_state.sec_conf_data
         if conflicts:
-            st.subheader("⚠️ 偵測到重疊佔位")
+            st.subheader("重複申請名單")
             html_table = "<table class='html-table'><tr><th>姓名</th><th>衝突詳情</th></tr>"
             for c in conflicts:
                 html_table += f"<tr><td>{c['姓名']}</td><td>{c['衝突詳情']}</td></tr>"
@@ -355,4 +355,4 @@ elif mode == "系秘":
             
             st.download_button(label="📥 下載跨院重疊名單 (CSV)", data=csv_sec, file_name="跨院重疊佔位名單.csv", mime="text/csv")
         else: 
-            st.success("查無重複佔位，目前名單一切正常。")
+            st.success("無重複申請，目前名單一切正常。")
