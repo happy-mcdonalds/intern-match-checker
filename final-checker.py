@@ -8,6 +8,13 @@ if "course_dur_weeks" not in st.session_state: st.session_state.course_dur_weeks
 if "min_weeks_req" not in st.session_state: st.session_state.min_weeks_req = 4
 if "require_cont" not in st.session_state: st.session_state.require_cont = True
 
+# 儲存比對結果，避免按下「下載」時畫面消失
+if "rep_run" not in st.session_state: st.session_state.rep_run = False
+if "sec_run" not in st.session_state: st.session_state.sec_run = False
+if "rep_col_data" not in st.session_state: st.session_state.rep_col_data = []
+if "rep_inv_data" not in st.session_state: st.session_state.rep_inv_data = []
+if "sec_conf_data" not in st.session_state: st.session_state.sec_conf_data = []
+
 # 頁面基本設定
 st.set_page_config(page_title="醫學系實習選配管理系統", layout="wide")
 
@@ -33,8 +40,19 @@ st.markdown("""
     }
     .stButton > button:hover { background-color: #72827A !important; }
 
+    /* 下載按鈕特別樣式 (柔和的燕麥色) */
+    [data-testid="stDownloadButton"] > button {
+        background-color: #D6D4CE !important;
+        color: #4A4C4B !important;
+        font-weight: bold;
+        border: 1px solid #C0BFB8 !important;
+    }
+    [data-testid="stDownloadButton"] > button:hover {
+        background-color: #C0BFB8 !important;
+    }
+
     /* 網頁自訂表格 (系秘用) */
-    .html-table { width: 100%; border-collapse: collapse; background-color: white; border: 1px solid #D6D4CE; }
+    .html-table { width: 100%; border-collapse: collapse; background-color: white; border: 1px solid #D6D4CE; margin-bottom: 15px;}
     .html-table th { background-color: #E3E1DB; color: #4A4C4B; padding: 12px; text-align: left; border-bottom: 2px solid #C0BFB8; }
     .html-table td { padding: 12px; border-bottom: 1px solid #EAE8E3; vertical-align: top; line-height: 1.8; }
     </style>
@@ -42,7 +60,6 @@ st.markdown("""
 
 # --- 3. 核心工具函式 ---
 
-# 【醫院代表專用讀取引擎】
 def smart_read_sheet(file, sheet_hints):
     try:
         xls = pd.ExcelFile(file)
@@ -87,11 +104,9 @@ def smart_read_sheet(file, sheet_hints):
     except Exception as e:
         return None
 
-# 【系秘專用讀取引擎】
 def secretary_read_sheet(file):
     try:
         xls = pd.ExcelFile(file)
-        
         target_sheet = xls.sheet_names[0]
         for sn in xls.sheet_names:
             if "確定" in sn or "正式" in sn:
@@ -188,15 +203,14 @@ if mode == "醫院代表":
 
     st.divider()
     
-    # 檔案上傳區塊 (新增防呆提示)
     col_q, col_a = st.columns(2)
     with col_q:
         q_file = st.file_uploader("上傳醫院容額表", type=['xlsx'])
-        st.caption("請上傳「醫院空白表格」的檔案，請確保檔案中只有這個分頁")
+        st.caption("💡 請上傳『醫院空白表格』，請確保檔案中只有這個分頁")
         
     with col_a:
         a_file = st.file_uploader("上傳學生志願表", type=['xlsx'])
-        st.caption("請上傳「志願申請名單(先寫這個寄給對方)」的檔案，請確保檔案中只有這個分頁")
+        st.caption("💡 請上傳『志願申請名單(先寫這個寄給對方)』，請確保檔案中只有這個分頁")
     
     st.markdown("<br>", unsafe_allow_html=True)
     if st.button("確認並開始比對"):
@@ -249,23 +263,44 @@ if mode == "醫院代表":
                                 if (recs[i+1]['開始'] - recs[i]['結束']).days > 3:
                                     invalid.append({"姓名": name, "原因": "時段未連續實習"})
                                     break
+                
+                # 將結果存入 session_state 避免畫面重整時消失
+                st.session_state.rep_run = True
+                st.session_state.rep_col_data = collisions
+                st.session_state.rep_inv_data = invalid
+            else: 
+                st.error("讀取失敗：請確保容額表有「科別」，學生表有「姓名」。")
+                st.session_state.rep_run = False
 
-                st.header("分析結果")
-                if collisions:
-                    st.subheader("撞期名單")
-                    st.dataframe(pd.DataFrame(collisions), use_container_width=True)
-                if invalid:
-                    st.subheader("不符合實習規定")
-                    st.dataframe(pd.DataFrame(invalid).drop_duplicates(), use_container_width=True)
-                if not collisions and not invalid: st.success("核對完成，查無異常。")
-            else: st.error("讀取失敗：請確保容額表有「科別」，學生表有「姓名」。")
+    # 顯示分析結果與下載按鈕 (從 Session State 讀取)
+    if st.session_state.rep_run:
+        st.header("分析結果")
+        col_data = st.session_state.rep_col_data
+        inv_data = st.session_state.rep_inv_data
+        
+        if col_data:
+            st.subheader("⚠️ 名額撞期名單")
+            df_col = pd.DataFrame(col_data)
+            st.dataframe(df_col, use_container_width=True)
+            # 轉換為含 BOM 的 UTF-8 確保 Excel 開啟中文不亂碼
+            csv_col = df_col.to_csv(index=False).encode('utf-8-sig')
+            st.download_button(label="📥 下載撞期名單 (CSV)", data=csv_col, file_name="名額撞期名單.csv", mime="text/csv")
+        
+        if inv_data:
+            st.subheader("📝 規章不符名單")
+            df_inv = pd.DataFrame(inv_data).drop_duplicates()
+            st.dataframe(df_inv, use_container_width=True)
+            csv_inv = df_inv.to_csv(index=False).encode('utf-8-sig')
+            st.download_button(label="📥 下載規章不符名單 (CSV)", data=csv_inv, file_name="規章不符名單.csv", mime="text/csv")
+            
+        if not col_data and not inv_data: 
+            st.success("核對完成，查無異常。")
 
 elif mode == "系秘":
     st.title("跨院重複佔位檢查")
     
-    # 檔案上傳區塊 (新增防呆提示)
     m_files = st.file_uploader("上傳各院清單 (可多選)", type=['xlsx'], accept_multiple_files=True)
-    st.caption("請上傳「確定實習名單(確定好名單寫此表單)」的檔案，請確保檔案中只有這個分頁")
+    st.caption("💡 請上傳『確定實習名單(確定好名單寫此表單)』的檔案，請確保檔案中只有這個分頁")
     st.markdown("<br>", unsafe_allow_html=True)
     
     if st.button("確認並開始比對") and m_files:
@@ -295,13 +330,29 @@ elif mode == "系秘":
                     details = "<br>".join([f"• {recs[idx]['來源']} ({str(recs[idx]['日期欄位']).replace('nan','').strip()})" for idx in sorted(list(hit))])
                     conflicts.append({"姓名": name, "衝突詳情": details})
             
-            if conflicts:
-                st.subheader("重複申請名單")
-                html_table = "<table class='html-table'><tr><th>姓名</th><th>衝突詳情</th></tr>"
-                for c in conflicts:
-                    html_table += f"<tr><td>{c['姓名']}</td><td>{c['衝突詳情']}</td></tr>"
-                html_table += "</table>"
-                st.markdown(html_table, unsafe_allow_html=True)
-            else: st.success("查無重複佔位，目前名單一切正常。")
+            # 將結果存入 Session State
+            st.session_state.sec_run = True
+            st.session_state.sec_conf_data = conflicts
         else:
             st.error("無法解析檔案，請確認上傳的表格是否有「中文姓名」、「實習日期(開始)」與「實習日期(結束)」等欄位。")
+            st.session_state.sec_run = False
+
+    # 顯示結果與下載按鈕
+    if st.session_state.sec_run:
+        conflicts = st.session_state.sec_conf_data
+        if conflicts:
+            st.subheader("⚠️ 偵測到重疊佔位")
+            html_table = "<table class='html-table'><tr><th>姓名</th><th>衝突詳情</th></tr>"
+            for c in conflicts:
+                html_table += f"<tr><td>{c['姓名']}</td><td>{c['衝突詳情']}</td></tr>"
+            html_table += "</table>"
+            st.markdown(html_table, unsafe_allow_html=True)
+            
+            # 準備 CSV 下載 (將 HTML 的 <br> 替換回正常的換行符號 \n)
+            df_export = pd.DataFrame(conflicts)
+            df_export['衝突詳情'] = df_export['衝突詳情'].str.replace('<br>', '\n')
+            csv_sec = df_export.to_csv(index=False).encode('utf-8-sig')
+            
+            st.download_button(label="📥 下載跨院重疊名單 (CSV)", data=csv_sec, file_name="跨院重疊佔位名單.csv", mime="text/csv")
+        else: 
+            st.success("查無重複佔位，目前名單一切正常。")
