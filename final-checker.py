@@ -11,10 +11,9 @@ if "require_cont" not in st.session_state: st.session_state.require_cont = True
 # 頁面基本設定
 st.set_page_config(page_title="醫學系實習選配管理系統", layout="wide")
 
-# --- 2. 極簡莫蘭迪 CSS (絕不干擾 Icon) ---
+# --- 2. 極簡莫蘭迪 CSS (修復 UI 跑版與 Icon) ---
 st.markdown("""
     <style>
-    /* 移除強制的 font-family，回歸原生乾淨介面並修復 Icon */
     .stApp { background-color: #F5F4F1; }
     
     h1, h2, h3 { 
@@ -43,19 +42,16 @@ st.markdown("""
 
 # --- 3. 核心工具函式 ---
 
+# 【保留不變】醫院代表專用讀取引擎
 def smart_read_sheet(file, sheet_hints):
-    """智慧讀取引擎：自動尋找正確分頁，並完美對接北榮與容額表格式"""
     try:
         xls = pd.ExcelFile(file)
-        
-        # 根據身份尋找正確的分頁
         target_sheet = xls.sheet_names[0]
         for sn in xls.sheet_names:
             if any(hint in sn for hint in sheet_hints):
                 target_sheet = sn
                 break
         
-        # 尋找真正的標題列
         df_raw = pd.read_excel(file, sheet_name=target_sheet, header=None, nrows=20)
         h_idx = 0
         for i, row in df_raw.iterrows():
@@ -65,18 +61,14 @@ def smart_read_sheet(file, sheet_hints):
                 break
                 
         df = pd.read_excel(file, sheet_name=target_sheet, header=h_idx)
-        
-        # 清除重複欄位，避免當機
         df = df.loc[:, ~df.columns.duplicated()].copy() 
         df.columns = [str(c).strip().replace('\n', '') for c in df.columns]
         
-        # 處理北榮格式：若有「開始」和「結束」兩格，自動合併
         start_col = next((c for c in df.columns if "開始" in c or "起" in c), None)
         end_col = next((c for c in df.columns if "結束" in c or "迄" in c), None)
         if start_col and end_col:
             df["日期欄位"] = df[start_col].astype(str) + " - " + df[end_col].astype(str)
             
-        # 欄位自動對接
         rename_map = {}
         for c in df.columns:
             if "姓名" in c: rename_map[c] = "姓名"
@@ -87,8 +79,6 @@ def smart_read_sheet(file, sheet_hints):
         
         df = df.rename(columns=rename_map)
         
-        # 注意：這裡「絕對不能」把 NA 刪掉，否則志願表的第二列會遺失！
-        # 只過濾掉官方範例 (如甄漂亮)
         if "姓名" in df.columns:
             mask = df["姓名"].astype(str).str.contains("甄漂亮|範例|例|說明|空白", na=False)
             df = df[~mask]
@@ -97,12 +87,63 @@ def smart_read_sheet(file, sheet_hints):
     except Exception as e:
         return None
 
+# 【全新打造】系秘專用讀取引擎 (針對北榮/國泰確定名單)
+def secretary_read_sheet(file):
+    try:
+        xls = pd.ExcelFile(file)
+        
+        # 1. 強制尋找「確定」或「正式」分頁
+        target_sheet = xls.sheet_names[0]
+        for sn in xls.sheet_names:
+            if "確定" in sn or "正式" in sn:
+                target_sheet = sn
+                break
+        
+        # 2. 精準掃描標題列
+        df_raw = pd.read_excel(file, sheet_name=target_sheet, header=None, nrows=20)
+        h_idx = 0
+        for i, row in df_raw.iterrows():
+            row_str = "".join([str(x) for x in row.values])
+            if "姓名" in row_str and ("開始" in row_str or "期間" in row_str):
+                h_idx = i
+                break
+                
+        df = pd.read_excel(file, sheet_name=target_sheet, header=h_idx)
+        df = df.loc[:, ~df.columns.duplicated()].copy() 
+        df.columns = [str(c).strip().replace('\n', '') for c in df.columns]
+        
+        # 3. 欄位精準定位
+        name_col = next((c for c in df.columns if "姓名" in c), None)
+        start_col = next((c for c in df.columns if "開始" in c), None)
+        end_col = next((c for c in df.columns if "結束" in c), None)
+        period_col = next((c for c in df.columns if "期間" in c or "日期" in c), None)
+        
+        if not name_col: return None
+        
+        # 4. 姓名整理與防呆 (向下填補)
+        df = df.rename(columns={name_col: "姓名"})
+        df["姓名"] = df["姓名"].ffill()
+        df = df[df["姓名"].notna()]
+        
+        # 5. 過濾甄漂亮範例
+        df = df[~df["姓名"].astype(str).str.contains("甄漂亮|範例|例|說明|空白", na=False)]
+        
+        # 6. 日期安全合併
+        if start_col and end_col:
+            df["日期欄位"] = df[start_col].astype(str) + " - " + df[end_col].astype(str)
+        elif period_col:
+            df["日期欄位"] = df[period_col]
+        else:
+            return None
+            
+        return df
+    except Exception as e:
+        return None
+
 def extract_dates_universal(text, year=2026):
-    """不受符號干擾的神級日期萃取"""
     if pd.isna(text) or str(text).strip() in ['nan', '']: return None, None
     if isinstance(text, datetime): return text, text
     
-    # 直接抓取所有「像日期的結構」
     pattern = r'(?:20\d\d[-./_])?\d{1,2}[-./_]\d{1,2}'
     matches = re.findall(pattern, str(text))
     
@@ -124,7 +165,6 @@ def parse_period_dates(p_str):
     s, e = extract_dates_universal(p_str)
     if s and e:
         if e < s: s, e = e, s
-        # 使用 bdate_range 精確計算工作天
         return s, e, len(pd.bdate_range(s, e))
     return None, None, 0
 
@@ -159,12 +199,11 @@ if mode == "醫院代表":
     
     if st.button("確認並開始比對"):
         if q_file and a_file:
-            # 醫院代表專用分頁提示
+            # 醫院代表維持使用舊版引擎，保持完美運作
             df_q = smart_read_sheet(q_file, ["容額", "時段", "空白"])
             df_a = smart_read_sheet(a_file, ["志願", "申請"])
             
             if df_q is not None and df_a is not None and '姓名' in df_a.columns:
-                # 關鍵修復：向下填補姓名，挽救因為儲存格合併而空白的第二志願
                 df_a['姓名'] = df_a['姓名'].ffill()
                 df_a = df_a[df_a['姓名'].notna()]
                 
@@ -175,7 +214,6 @@ if mode == "醫院代表":
                         s, e, d = parse_period_dates(t_val)
                         if s: apps.append({'姓名': row['姓名'], '科別': str(d_val).strip(), '開始': s, '結束': e, '天數': d})
                 
-                # 容額比對
                 date_cols = [c for c in df_q.columns if extract_dates_universal(c)[0]]
                 q_dept_col = '科別' if '科別' in df_q.columns else df_q.columns[0]
                 collisions = []
@@ -194,13 +232,11 @@ if mode == "醫院代表":
                         if len(st_in) > cap:
                             collisions.append({"科別": dept, "時間": str(col).replace('\n', ' '), "容額": cap, "超額學生": "、".join(list(set(st_in)))})
 
-                # 規章審核
                 invalid = []
                 if apps:
                     df_temp = pd.DataFrame(apps)
                     for name, gp in df_temp.groupby('姓名'):
                         gp = gp.sort_values('開始')
-                        # 顯示給使用者看的詳細天數
                         if gp['天數'].sum() < st.session_state.min_weeks_req * 5:
                             invalid.append({"姓名": name, "原因": f"總實習天數不足 (累計 {gp['天數'].sum()} 個工作天)"})
                         for _, r in gp.iterrows():
@@ -215,24 +251,23 @@ if mode == "醫院代表":
 
                 st.header("分析結果")
                 if collisions:
-                    st.subheader("名額撞期名單")
+                    st.subheader("撞期名單")
                     st.dataframe(pd.DataFrame(collisions), use_container_width=True)
                 if invalid:
-                    st.subheader("規章不符名單")
+                    st.subheader("不符合實習規定")
                     st.dataframe(pd.DataFrame(invalid).drop_duplicates(), use_container_width=True)
                 if not collisions and not invalid: st.success("核對完成，查無異常。")
             else: st.error("讀取失敗：請確保容額表有「科別」，學生表有「姓名」。")
 
 elif mode == "系秘":
     st.title("跨院重複佔位檢查")
-    m_files = st.file_uploader("上傳各院清單 (北榮確定名單格式)", type=['xlsx'], accept_multiple_files=True)
+    m_files = st.file_uploader("上傳各院清單 (確定名單格式)", type=['xlsx'], accept_multiple_files=True)
     if st.button("確認並開始比對") and m_files:
         all_d = []
         for f in m_files:
-            # 系秘專用分頁提示
-            df = smart_read_sheet(f, ["確定", "名單", "正式"])
+            # 系秘全面改用專屬引擎 secretary_read_sheet
+            df = secretary_read_sheet(f)
             if df is not None and '姓名' in df.columns and '日期欄位' in df.columns:
-                df['姓名'] = df['姓名'].ffill()
                 df['來源'] = f.name.replace('.xlsx', '')
                 df = df[df['日期欄位'].notna() & (df['日期欄位'].astype(str) != 'nan')]
                 all_d.append(df)
@@ -263,3 +298,5 @@ elif mode == "系秘":
                 html_table += "</table>"
                 st.markdown(html_table, unsafe_allow_html=True)
             else: st.success("查無重複佔位，目前名單一切正常。")
+        else:
+            st.error("無法解析檔案，請確認上傳的表格是否有「中文姓名」、「實習日期(開始)」與「實習日期(結束)」等欄位。")
