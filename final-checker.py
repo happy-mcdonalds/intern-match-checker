@@ -14,57 +14,47 @@ if "require_cont" not in st.session_state:
 # 頁面基本設定
 st.set_page_config(page_title="醫學系實習選配管理系統", layout="wide")
 
-# --- CSS 視覺設定：黑體 + 莫蘭迪色 + 中文化極簡上傳框 ---
+# --- 莫蘭迪色系 + 強制純宋體 CSS ---
 st.markdown("""
     <style>
-    /* 全局無襯線黑體 */
-    * {
-        font-family: "PingFang TC", "微軟正黑體", "Helvetica Neue", Helvetica, Arial, sans-serif !important;
-    }
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;700&display=swap');
     
-    /* 莫蘭迪背景與文字顏色 */
     html, body, [class*="css"], [data-testid="stAppViewContainer"], .stApp {
-        background-color: #F6F5F2 !important; 
+        font-family: 'Noto Serif TC', 'Songti TC', 'PMingLiU', 'MingLiU', 'SimSun', serif !important;
+        background-color: #F5F4F1 !important; 
         color: #5C5E5D !important; 
     }
     
-    /* 標題設計 (乾淨俐落) */
     h1, h2, h3 { 
-        color: #3B4441 !important; 
-        border-bottom: 2px solid #D6D4CE; 
-        padding-bottom: 8px; 
-        font-weight: bold;
+        color: #4A4C4B !important; 
+        border-bottom: 1px solid #D6D4CE; 
+        padding-bottom: 5px;
+        font-weight: 700;
     }
-
-    /* 側邊欄 */
+    
     section[data-testid="stSidebar"] { 
-        background-color: #EAE8E3 !important; 
+        background-color: #EAE8E3 !important;
         border-right: 1px solid #D6D4CE !important; 
     }
-
-    /* 表單區塊設計 */
+    
     [data-testid="stForm"] {
         border: 1px solid #D6D4CE !important;
-        background-color: #FFFFFF !important;
-        border-radius: 8px;
-        padding: 24px;
-        box-shadow: 0 2px 6px rgba(0,0,0,0.03);
+        background-color: #FDFDFD !important;
+        border-radius: 4px;
+        padding: 20px;
     }
-
-    /* 一般按鈕 (經典鼠尾草綠) */
+    
+    /* 一般按鈕 (鼠尾草綠) */
     .stButton > button, [data-testid="stFormSubmitButton"] > button { 
         background-color: #8A9A92 !important;
         color: #FFFFFF !important; 
         border: none !important;
-        border-radius: 6px !important; 
+        border-radius: 4px !important; 
         width: 100%; 
-        font-size: 16px !important;
-        font-weight: bold !important; 
         transition: 0.3s;
     }
     .stButton > button:hover, [data-testid="stFormSubmitButton"] > button:hover {
         background-color: #72827A !important;
-        transform: translateY(-1px);
     }
 
     /* 重新整理與儲存按鈕 (淡雅灰) */
@@ -75,82 +65,19 @@ st.markdown("""
     .btn-secondary > button:hover {
         background-color: #A8A7A0 !important;
     }
-
-    /* 表格設計 */
-    .stTable { font-size: 15px; }
+    
+    .stTable { font-size: 14px; }
     th {
-        background-color: #E6E4DF !important; 
+        background-color: #E3E1DB !important;
         color: #4A4C4B !important;
         border-bottom: 2px solid #C0BFB8 !important;
-        font-weight: bold !important;
     }
-    td { border-bottom: 1px solid #F6F5F2 !important; }
+    td { border-bottom: 1px solid #EAE8E3 !important; }
     th, td {
         white-space: pre-wrap !important; 
-        vertical-align: middle !important;
-        line-height: 1.6 !important;
+        vertical-align: top !important;
+        line-height: 1.8 !important;
         text-align: left !important;
-        padding: 10px 12px !important;
-    }
-
-    /* ======= 檔案上傳區塊：極簡化 ======= */
-    [data-testid="stFileUploadDropzone"] {
-        background-color: #FFFFFF !important;
-        border: 1px dashed #C0BFB8 !important;
-        border-radius: 8px !important;
-        padding: 20px 10px !important;
-        width: 100% !important; /* 確保不超出 column */
-        box-sizing: border-box !important;
-        display: flex !important;
-        flex-direction: column !important;
-        align-items: center !important;
-        justify-content: center !important;
-    }
-
-    /* 1. 隱藏預設的雲朵圖示 (消滅醜物) */
-    [data-testid="stFileUploadDropzone"] svg {
-        display: none !important;
-    }
-
-    /* 2. 隱藏預設的英文字 */
-    [data-testid="stFileUploadDropzone"] > div:first-child * {
-        font-size: 0px !important;
-        color: transparent !important;
-        margin: 0 !important;
-    }
-
-    /* 3. 注入純淨的中文說明 */
-    [data-testid="stFileUploadDropzone"] > div:first-child::after {
-        content: "拖曳檔案至此";
-        display: block;
-        color: #5C5E5D !important;
-        font-size: 14px !important;
-        margin-bottom: 12px;
-        text-align: center;
-    }
-
-    /* 4. 修改 Browse files 按鈕 */
-    [data-testid="stFileUploadDropzone"] button {
-        position: relative !important;
-        width: 120px !important;
-        border: none !important;
-        background: transparent !important;
-        margin: 0 auto !important;
-    }
-    [data-testid="stFileUploadDropzone"] button * { display: none !important; }
-    [data-testid="stFileUploadDropzone"] button::before {
-        content: "選擇檔案";
-        display: flex; align-items: center; justify-content: center;
-        background-color: #EAE8E3 !important;
-        color: #4A4C4B !important;
-        font-size: 13px;
-        padding: 6px 0;
-        border-radius: 4px;
-        border: 1px solid #D6D4CE !important;
-        transition: 0.2s;
-    }
-    [data-testid="stFileUploadDropzone"] button:hover::before {
-        background-color: #D6D4CE !important;
     }
     </style>
     """, unsafe_allow_html=True)
