@@ -11,17 +11,26 @@ if "require_cont" not in st.session_state: st.session_state.require_cont = True
 # 頁面基本設定
 st.set_page_config(page_title="醫學系實習選配管理系統", layout="wide")
 
-# --- 莫蘭迪色系 + 一般黑體 CSS ---
+# --- 莫蘭迪色系 + 強制全域黑體 (含檔案上傳器修正) ---
 st.markdown("""
     <style>
-    /* 全域使用一般黑體 (Sans-serif) */
+    /* 1. 全域黑體設定 */
     html, body, [class*="css"], [data-testid="stAppViewContainer"], .stApp {
-        font-family: "Microsoft JhengHei", "Heiti TC", "Apple LiGothic Medium", sans-serif !important;
+        font-family: "Microsoft JhengHei", "Heiti TC", "Apple LiGothic Medium", "Segoe UI", sans-serif !important;
         background-color: #F5F4F1 !important; 
         color: #5C5E5D !important; 
     }
+
+    /* 2. 特別針對檔案上傳器 (File Uploader) 的字體修正 */
+    [data-testid="stFileUploaderLabel"], 
+    [data-testid="stFileUploadDropzone"] div, 
+    [data-testid="stUploadedFile"] div,
+    .stMarkdown div, p {
+        font-family: "Microsoft JhengHei", "Heiti TC", sans-serif !important;
+    }
     
     h1, h2, h3 { 
+        font-family: "Microsoft JhengHei", "Heiti TC", sans-serif !important;
         color: #4A4C4B !important; 
         border-bottom: 1px solid #D6D4CE; 
         padding-bottom: 5px; 
@@ -40,7 +49,7 @@ st.markdown("""
         padding: 20px;
     }
     
-    /* 按鈕樣式 (鼠尾草綠) */
+    /* 按鈕樣式 */
     .stButton > button, [data-testid="stFormSubmitButton"] > button { 
         background-color: #8A9A92 !important; 
         color: #FFFFFF !important; 
@@ -48,6 +57,7 @@ st.markdown("""
         border-radius: 4px !important; 
         width: 100%; 
         transition: 0.3s;
+        font-family: "Microsoft JhengHei", "Heiti TC", sans-serif !important;
     }
     .stButton > button:hover, [data-testid="stFormSubmitButton"] > button:hover {
         background-color: #72827A !important;
@@ -58,7 +68,7 @@ st.markdown("""
         color: #FFFFFF !important;
     }
     
-    /* 表格樣式：確保換行生效 */
+    /* 表格樣式 */
     table { width: 100%; border-collapse: collapse; margin-top: 10px; background-color: white; }
     th { background-color: #E3E1DB !important; color: #4A4C4B !important; padding: 12px; text-align: left; border-bottom: 2px solid #C0BFB8; }
     td { padding: 12px; border-bottom: 1px solid #EAE8E3; vertical-align: top; line-height: 1.6; white-space: pre-wrap !important; }
