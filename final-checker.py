@@ -14,47 +14,57 @@ if "require_cont" not in st.session_state:
 # 頁面基本設定
 st.set_page_config(page_title="醫學系實習選配管理系統", layout="wide")
 
-# --- 莫蘭迪色系 + 強制純宋體 CSS ---
+# --- CSS 視覺設定：黑體 + 莫蘭迪色 + 中文化極簡上傳框 ---
 st.markdown("""
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;700&display=swap');
+    /* 全局無襯線黑體 */
+    * {
+        font-family: "PingFang TC", "微軟正黑體", "Helvetica Neue", Helvetica, Arial, sans-serif !important;
+    }
     
+    /* 莫蘭迪背景與文字顏色 */
     html, body, [class*="css"], [data-testid="stAppViewContainer"], .stApp {
-        font-family: 'Noto Serif TC', 'Songti TC', 'PMingLiU', 'MingLiU', 'SimSun', serif !important;
-        background-color: #F5F4F1 !important; 
+        background-color: #F6F5F2 !important; 
         color: #5C5E5D !important; 
     }
     
+    /* 標題設計 (乾淨俐落) */
     h1, h2, h3 { 
-        color: #4A4C4B !important; 
-        border-bottom: 1px solid #D6D4CE; 
-        padding-bottom: 5px;
-        font-weight: 700;
+        color: #3B4441 !important; 
+        border-bottom: 2px solid #D6D4CE; 
+        padding-bottom: 8px; 
+        font-weight: bold;
     }
-    
+
+    /* 側邊欄 */
     section[data-testid="stSidebar"] { 
-        background-color: #EAE8E3 !important;
+        background-color: #EAE8E3 !important; 
         border-right: 1px solid #D6D4CE !important; 
     }
-    
+
+    /* 表單區塊設計 */
     [data-testid="stForm"] {
         border: 1px solid #D6D4CE !important;
-        background-color: #FDFDFD !important;
-        border-radius: 4px;
-        padding: 20px;
+        background-color: #FFFFFF !important;
+        border-radius: 8px;
+        padding: 24px;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.03);
     }
-    
-    /* 一般按鈕 (鼠尾草綠) */
+
+    /* 一般按鈕 (經典鼠尾草綠) */
     .stButton > button, [data-testid="stFormSubmitButton"] > button { 
         background-color: #8A9A92 !important;
         color: #FFFFFF !important; 
         border: none !important;
-        border-radius: 4px !important; 
+        border-radius: 6px !important; 
         width: 100%; 
+        font-size: 16px !important;
+        font-weight: bold !important; 
         transition: 0.3s;
     }
     .stButton > button:hover, [data-testid="stFormSubmitButton"] > button:hover {
         background-color: #72827A !important;
+        transform: translateY(-1px);
     }
 
     /* 重新整理與儲存按鈕 (淡雅灰) */
@@ -65,28 +75,89 @@ st.markdown("""
     .btn-secondary > button:hover {
         background-color: #A8A7A0 !important;
     }
-    
-    .stTable { font-size: 14px; }
+
+    /* 表格設計 */
+    .stTable { font-size: 15px; }
     th {
-        background-color: #E3E1DB !important;
+        background-color: #E6E4DF !important; 
         color: #4A4C4B !important;
         border-bottom: 2px solid #C0BFB8 !important;
+        font-weight: bold !important;
     }
-    td { border-bottom: 1px solid #EAE8E3 !important; }
+    td { border-bottom: 1px solid #F6F5F2 !important; }
     th, td {
         white-space: pre-wrap !important; 
-        vertical-align: top !important;
-        line-height: 1.8 !important;
+        vertical-align: middle !important;
+        line-height: 1.6 !important;
         text-align: left !important;
+        padding: 10px 12px !important;
+    }
+
+    /* ======= 檔案上傳區塊：極簡化 ======= */
+    [data-testid="stFileUploadDropzone"] {
+        background-color: #FFFFFF !important;
+        border: 1px dashed #C0BFB8 !important;
+        border-radius: 8px !important;
+        padding: 20px 10px !important;
+        width: 100% !important; /* 確保不超出 column */
+        box-sizing: border-box !important;
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: center !important;
+        justify-content: center !important;
+    }
+
+    /* 1. 隱藏預設的雲朵圖示 (消滅醜物) */
+    [data-testid="stFileUploadDropzone"] svg {
+        display: none !important;
+    }
+
+    /* 2. 隱藏預設的英文字 */
+    [data-testid="stFileUploadDropzone"] > div:first-child * {
+        font-size: 0px !important;
+        color: transparent !important;
+        margin: 0 !important;
+    }
+
+    /* 3. 注入純淨的中文說明 */
+    [data-testid="stFileUploadDropzone"] > div:first-child::after {
+        content: "拖曳檔案至此";
+        display: block;
+        color: #5C5E5D !important;
+        font-size: 14px !important;
+        margin-bottom: 12px;
+        text-align: center;
+    }
+
+    /* 4. 修改 Browse files 按鈕 */
+    [data-testid="stFileUploadDropzone"] button {
+        position: relative !important;
+        width: 120px !important;
+        border: none !important;
+        background: transparent !important;
+        margin: 0 auto !important;
+    }
+    [data-testid="stFileUploadDropzone"] button * { display: none !important; }
+    [data-testid="stFileUploadDropzone"] button::before {
+        content: "選擇檔案";
+        display: flex; align-items: center; justify-content: center;
+        background-color: #EAE8E3 !important;
+        color: #4A4C4B !important;
+        font-size: 13px;
+        padding: 6px 0;
+        border-radius: 4px;
+        border: 1px solid #D6D4CE !important;
+        transition: 0.2s;
+    }
+    [data-testid="stFileUploadDropzone"] button:hover::before {
+        background-color: #D6D4CE !important;
     }
     </style>
     """, unsafe_allow_html=True)
 
 # --- 核心工具函式 ---
 def smart_read_sheet(file):
-    # 這個超級引擎現在同時為「醫院代表」和「系秘」服務
     try:
-        # 1. 支援 CSV 與 Excel
         if file.name.endswith('.csv'):
             df_temp = pd.read_csv(file, header=None)
             target_sheet = None
@@ -99,7 +170,6 @@ def smart_read_sheet(file):
                     break
             df_temp = pd.read_excel(file, sheet_name=target_sheet, header=None)
         
-        # 2. 修正標題列判斷邏輯
         header_idx = 0
         for i in range(min(len(df_temp), 15)):
             row_str = "".join([str(x).replace(" ", "") for x in df_temp.iloc[i].values])
@@ -112,7 +182,6 @@ def smart_read_sheet(file):
         else:
             df = pd.read_excel(file, sheet_name=target_sheet, header=header_idx)
         
-        # 3. 清理與統一欄位名稱 (包含對「科別」的相容)
         cols = []
         for c in df.columns:
             c_str = str(c).strip().replace('\n', '').replace(' ', '')
@@ -126,32 +195,24 @@ def smart_read_sheet(file):
                 cols.append(c_str)
         df.columns = cols
         
-        # 4. 針對你的新格式：自動將「開始日期」與「結束日期」合併為一格「實習期間」
         start_col = next((c for c in df.columns if "開始" in str(c) and "日期" in str(c)), None)
         end_col = next((c for c in df.columns if "結束" in str(c) and "日期" in str(c)), None)
         
         if start_col and end_col and "實習期間" not in df.columns:
             def safe_format(val):
-                if pd.isna(val) or str(val).strip() == '' or str(val).lower() == 'nan':
-                    return ""
-                try:
-                    return pd.to_datetime(val).strftime('%Y/%m/%d')
-                except:
-                    # 確保將破折號轉為底層系統認得的斜線
-                    return str(val).replace('-', '/')
-                    
+                if pd.isna(val) or str(val).strip() == '' or str(val).lower() == 'nan': return ""
+                try: return pd.to_datetime(val).strftime('%Y/%m/%d')
+                except: return str(val).replace('-', '/')
             df["實習期間"] = df.apply(
                 lambda row: f"{safe_format(row[start_col])} ~ {safe_format(row[end_col])}" 
                 if safe_format(row[start_col]) and safe_format(row[end_col]) else None, 
                 axis=1
             )
-            
         return df
     except Exception as e: 
         return None
 
 def extract_dates_universal(text, year=2026):
-    """終極日期解析引擎"""
     if isinstance(text, datetime): return text, text
     text = str(text).replace('\n', '-').replace('\r', '-').replace(' ', '').strip()
     parts = re.split(r'[-~～到至_]+', text)
@@ -211,9 +272,13 @@ if mode == "醫院代表":
     
     st.markdown("### 檔案上傳與比對")
     c1, c2 = st.columns(2)
-    # 開放讓醫院代表也可以上傳 CSV
-    with c1: q_file = st.file_uploader("上傳醫院容額表", type=['xlsx', 'csv'])
-    with c2: a_file = st.file_uploader("上傳學生志願表", type=['xlsx', 'csv'])
+    with c1: 
+        st.markdown("**1. 志願申請名單**")
+        a_file = st.file_uploader("上傳申請名單 (CSV/XLSX)", type=['xlsx', 'csv'], key="app_up")
+    with c2: 
+        st.markdown("**2. 實習容額與時段表**")
+        q_file = st.file_uploader("上傳容額表 (CSV/XLSX)", type=['xlsx', 'csv'], key="cap_up")
+    
     run_check = st.button("確認並開始比對")
 
     if run_check and q_file and a_file:
@@ -221,7 +286,7 @@ if mode == "醫院代表":
         total_min_workdays = st.session_state.min_weeks_req * 5
         
         try:
-            # 容額表讀取 (相容 CSV 或 Excel)
+            # 讀取容額表 (因醫學系格式，跳過前四列複雜標頭)
             if q_file.name.endswith('.csv'):
                 df_q = pd.read_csv(q_file, header=4)
             else:
@@ -231,14 +296,13 @@ if mode == "醫院代表":
                 df_q = pd.read_excel(q_file, sheet_name=sn_q, header=4)
             df_q.columns = [str(c).strip() for c in df_q.columns]
 
-            # 【關鍵修復】: 將強大的 smart_read_sheet 套用到學生志願表上
+            # 讀取申請表
             df_a = smart_read_sheet(a_file)
 
             if df_q is not None and df_a is not None:
                 if '姓名' in df_a.columns: df_a['姓名'] = df_a['姓名'].ffill()
                 
                 apps = []
-                # smart_read_sheet 已經統一將欄位名稱洗成 "科別"
                 dept_col = "科別" if "科別" in df_a.columns else "申請科別"
                 for _, row in df_a.iterrows():
                     if pd.notna(row.get(dept_col)) and pd.notna(row.get('實習期間')):
